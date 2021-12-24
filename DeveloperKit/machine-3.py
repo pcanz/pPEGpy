@@ -38,7 +38,7 @@ def parse(grammar_code, input):
     }
     start = env["rules"]["$start"]
     result = eval(start, env)
-    return env["tree"]
+    return (result, env["pos"], env["tree"])
 
 def eval(exp, env):
     print(exp, env["pos"])
@@ -71,19 +71,18 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
-    start = env["pos"]
-    stack = len(env["tree"])
     for arg in exp[1]:
-        if not eval(arg, env):
-            if len(env["tree"]) > stack:
-                env["tree"] = env["tree"][0:stack]
-            env["pos"] = start           
-            return False
+        if not eval(arg, env): return False
     return True
 
 def alt(exp, env):
+    start = env["pos"]
+    stack = len(env["tree"])
     for arg in exp[1]:
         if eval(arg, env): return True
+        if len(env["tree"]) > stack:
+            env["tree"] = env["tree"][0:stack]       
+        env["pos"] = start
     return False
 
 def rep(exp, env):
@@ -91,9 +90,7 @@ def rep(exp, env):
     min, max = 0, 0  # sfx == "*" 
     if  sfx == "+": min = 1
     elif sfx == "?": max = 1
-    start = env["pos"]
-    stack = len(env["tree"])
-    count, pos = 0, start
+    count, pos = 0, env["pos"]
     while True:
         result = eval(expr, env)
         if result == False: break
@@ -101,35 +98,30 @@ def rep(exp, env):
         count += 1
         if count == max: break # max 0 means any
         pos = env["pos"]
-    if count < min:
-        if len(env["tree"]) > stack:
-            env["tree"] = env["tree"][0:stack]
-        env["pos"] = start
-        return False
+    if count < min: return False
     return True
 
 def sq(exp, env):
-    pos = env["pos"]
     input = env["input"]
     end = len(input)
     for c in exp[1][1:-1]:
+        pos = env["pos"]
         if pos >= end or c != input[pos]: return False
-        pos += 1
-    env["pos"] = pos
+        env["pos"] = pos+1
     return True
 
 def dq(exp, env):
-    pos = env["pos"]
     input = env["input"]
     end = len(input)
     for c in exp[1][1:-1]:
+        pos = env["pos"]
         if pos >= end: return False
         if c == " ":
             while pos < end and input[pos] <= " ": pos += 1
+            env["pos"] = pos
             continue
         if c != input[pos]: return False
-        pos += 1
-    env["pos"] = pos
+        env["pos"] = pos+1
     return True
 
 def chs(exp, env):
@@ -155,30 +147,6 @@ print( parse(date_code, "2021-03-04") ) # eval exp ...
 
 """  Impementation Notes:
 
-From step 1:
-
-TODO seq does not correct the current pos after a failure
-
-alt assumes the current pos is correct after a failure
-
-sq needs to check for end of input
-
-sq needs to skip the quotes quote marks
-
-From Step 2:
-
-Add parse tree building, all this is in id rule.
-
-TODO: upper case rule names and anon umderscore rule names.
-
-Step 3:
-
-Adds rep, dq, and chs rules.
-
-rep needs to reset current pos and reset tree
-
-rep assumes eval failure will have reset current pos and tree
-
-    seq does not do this, fix that here (the TODO from step 1).
+Adds rep, dq, and chs rules
 
 """

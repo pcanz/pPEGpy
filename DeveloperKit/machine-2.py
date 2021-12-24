@@ -49,6 +49,7 @@ date_code = {
     "$start": ["id", "date"]
 }
 
+
 def parse(grammar_code, input):
     env = {
         "rules": grammar_code,
@@ -58,7 +59,7 @@ def parse(grammar_code, input):
     }
     start = env["rules"]["$start"]
     result = eval(start, env)
-    return env["tree"]
+    return (result, env["pos"], env["tree"])
 
 def eval(exp, env):
     print(exp, exp[0])
@@ -93,39 +94,32 @@ def seq(exp, env):
     return True
 
 def alt(exp, env):
+    start = env["pos"]
+    stack = len(env["tree"])
     for arg in exp[1]:
         if eval(arg, env): return True
+        if len(env["tree"]) > stack:
+            env["tree"] = env["tree"][0:stack]       
+        env["pos"] = start
     return False
 
 def sq(exp, env):
-    pos = env["pos"]
     input = env["input"]
     end = len(input)
     for c in exp[1][1:-1]:
+        pos = env["pos"]
         if pos >= end or c != input[pos]: return False
-        pos += 1
-    env["pos"] = pos
+        env["pos"] = pos+1
     return True
-
 
 print( parse(date_code, "2021-03-04") ) # eval exp ...
 
 """  Impementation Notes:
 
-From step 1:
-
-TODO seq does not correct the current pos after a failure
-
-alt assumes the current pos is correct after a failure
-
-sq needs to check for end of input
-
-sq needs to skip the quotes quote marks
-
-Step 2:
-
 Add parse tree building, all this is in id rule.
 
-TODO: upper case rule names and anon umderscore rule names.
+Add reset tree in alt
+
+TODO: upper case rule names and anon underscore rule names.
 
 """

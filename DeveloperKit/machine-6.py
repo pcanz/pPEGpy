@@ -1,8 +1,7 @@
 """
-    Step 5: 
+    Step 6: 
     full pPEG grammar,
-    bootstrap ptree from step 4 
-    compiler to translate pPEG ptree into parser code,
+    uses pPEG ptree from step 5 
     export grammar compile API
 """
 
@@ -33,26 +32,7 @@ pPEG_grammar = """
     _space_ = ('#' ~[\n\r]* / [ \t\n\r]*)*
 """
 
-boot_ptree = ["Peg",[
-    ["rule",[["id","Peg"],["seq",[["dq","\" \""],["rep",[["seq",[["id","rule"],["dq","\" \""]]],
-        ["sfx","+"]]]]]]],
-    ["rule",[["id","rule"],["seq",[["id","id"],["dq","\" = \""],["id","alt"]]]]],
-    ["rule",[["id","alt"],["seq",[["id","seq"],["rep",[["seq",[["dq","\" / \""],["id","seq"]]],
-        ["sfx","*"]]]]]]],
-    ["rule",[["id","seq"],["seq",[["id","rep"],["rep",[["seq",[["sq","' '"],["id","rep"]]],
-        ["sfx","*"]]]]]]],
-    ["rule",[["id","rep"],["seq",[["id","pre"],["rep",[["id","sfx"],["sfx","?"]]]]]]],
-    ["rule",[["id","pre"],["seq",[["rep",[["id","pfx"],["sfx","?"]]],["id","term"]]]]],
-    ["rule",[["id","term"],["alt",[["id","id"],["id","sq"],["id","dq"],["id","chs"],["id","group"]]]]],
-    ["rule",[["id","id"],["rep",[["chs","[a-zA-Z_]"],["sfx","+"]]]]],
-    ["rule",[["id","pfx"],["chs","[&!~]"]]],["rule",[["id","sfx"],["chs","[+?*]"]]],
-    ["rule",[["id","sq"],["seq",[["dq","\"'\""],["rep",[["pre",[["pfx","~"],["dq","\"'\""]]],
-        ["sfx","*"]]],["dq","\"'\""]]]]],
-    ["rule",[["id","dq"],["seq",[["sq","'\"'"],["rep",[["pre",[["pfx","~"],["sq","'\"'"]]],
-        ["sfx","*"]]],["sq","'\"'"]]]]],
-    ["rule",[["id","chs"],["seq",[["sq","'['"],["rep",[["pre",[["pfx","~"],["sq","']'"]]],
-        ["sfx","*"]]],["sq","']'"]]]]],
-    ["rule",[["id","group"],["seq",[["dq","\"( \""],["id","alt"],["dq","\" )\""]]]]]]]
+pPEG_ptree = ["Peg", [["rule", [["id", "Peg"], ["seq", [["dq", "\" \""], ["rep", [["seq", [["id", "rule"], ["dq", "\" \""]]], ["sfx", "+"]]]]]]], ["rule", [["id", "rule"], ["seq", [["id", "id"], ["dq", "\" = \""], ["id", "alt"]]]]], ["rule", [["id", "alt"], ["seq", [["id", "seq"], ["rep", [["seq", [["dq", "\" / \""], ["id", "seq"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "seq"], ["seq", [["id", "rep"], ["rep", [["seq", [["dq", "\" \""], ["id", "rep"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "rep"], ["seq", [["id", "pre"], ["rep", [["id", "sfx"], ["sfx", "?"]]]]]]], ["rule", [["id", "pre"], ["seq", [["rep", [["id", "pfx"], ["sfx", "?"]]], ["id", "term"]]]]], ["rule", [["id", "term"], ["alt", [["id", "call"], ["id", "sq"], ["id", "dq"], ["id", "chs"], ["id", "group"], ["id", "extn"]]]]], ["rule", [["id", "id"], ["seq", [["chs", "[a-zA-Z_]"], ["rep", [["chs", "[a-zA-Z0-9_]"], ["sfx", "*"]]]]]]], ["rule", [["id", "pfx"], ["chs", "[&!~]"]]], ["rule", [["id", "sfx"], ["alt", [["chs", "[+?]"], ["seq", [["sq", "'*'"], ["rep", [["id", "range"], ["sfx", "?"]]]]]]]]], ["rule", [["id", "range"], ["seq", [["id", "num"], ["rep", [["seq", [["id", "dots"], ["rep", [["id", "num"], ["sfx", "?"]]]]], ["sfx", "?"]]]]]]], ["rule", [["id", "num"], ["rep", [["chs", "[0-9]"], ["sfx", "+"]]]]], ["rule", [["id", "dots"], ["sq", "'..'"]]], ["rule", [["id", "call"], ["seq", [["id", "id"], ["pre", [["pfx", "!"], ["dq", "\" =\""]]]]]]], ["rule", [["id", "sq"], ["seq", [["dq", "\"'\""], ["rep", [["pre", [["pfx", "~"], ["dq", "\"'\""]]], ["sfx", "*"]]], ["dq", "\"'\""], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "dq"], ["seq", [["sq", "'\"'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'\"'"]]], ["sfx", "*"]]], ["sq", "'\"'"], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "chs"], ["seq", [["sq", "'['"], ["rep", [["pre", [["pfx", "~"], ["sq", "']'"]]], ["sfx", "*"]]], ["sq", "']'"]]]]], ["rule", [["id", "group"], ["seq", [["dq", "\"( \""], ["id", "alt"], ["dq", "\" )\""]]]]], ["rule", [["id", "extn"], ["seq", [["sq", "'<'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'>'"]]], ["sfx", "*"]]], ["sq", "'>'"]]]]], ["rule", [["id", "_space_"], ["rep", [["alt", [["seq", [["sq", "'#'"], ["rep", [["pre", [["pfx", "~"], ["chs", "[\n\r]"]]], ["sfx", "*"]]]]], ["rep", [["chs", "[ \t\n\r]"], ["sfx", "*"]]]]], ["sfx", "*"]]]]]]]
 
 def parse(grammar_code, input):
     env = {
@@ -67,7 +47,7 @@ def parse(grammar_code, input):
     }
     start = env["rules"]["$start"]
     result = eval(start, env)
-    return { "ok": result, "err": env["pos"], "ptree": env["tree"][0]}
+    return {"ok": result, "err": env["pos"], "ptree": env["tree"][0]}
 
 def eval(exp, env):
     # print(exp, env["pos"])
@@ -251,42 +231,43 @@ def compiler(ptree): # ptree -> code
     code["$start"] = ["id", start]
     return code
 
-boot_code = compiler(boot_ptree)  # ; print(boot_code)
+pPEG_code = compiler(pPEG_ptree)  #; print(pPEG_code)
 
-pPEG_boot = parse(boot_code, pPEG_grammar)
+def compile(grammar):
+    peg = parse(pPEG_code, grammar)
+    print(peg)
+    if not peg["ok"]: return peg
+    code = compiler(peg["ptree"])
+    print(code)   
+    def parser(input):
+        return parse(code, input)
+    return {"ok": True,  "parse": parser }
 
-pPEG_code = compiler(pPEG_boot["ptree"])
+# -- test ----------------------------------------
 
-pPEG_pPEG = parse(pPEG_code, pPEG_grammar)
+date = compile("""
+    date  = year '-' month '-' day
+    year  = [0-9]+
+    month = [0-9]+
+    day   = [0-9]+
+""")
 
-import json
-
-pPEG_boot_ptree = json.dumps(pPEG_boot["ptree"])
-
-pPEG_pPEG_ptree = json.dumps(pPEG_pPEG["ptree"])
-
-print("boot success: ", pPEG_boot_ptree == pPEG_pPEG_ptree)
-
-print( json.dumps(pPEG_boot["ptree"]) ) 
-
-print( json.dumps(pPEG_pPEG["ptree"]) ) 
+print( date["parse"]("2012-03-04") )
 
 
 """  Impementation Notes:
 
-Uses boot ptree from step 4
+Uses pPEG ptree from step 5
 
-Uses parser machine from step 4
+Uses parser machine from step 5
 
-with slightly modified parse result
 
-Bootstrap pPEG parses pPEG
 
 TODO extra features in pPEG yet to be implemented
-- _space_ to enable comments
 - numeric repeat range
 - case insensitive string matching
 
 TODO API grammar compile function
 
 """
+

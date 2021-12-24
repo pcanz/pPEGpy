@@ -1,4 +1,3 @@
-
 """
     Step 1: 
     date grammar, 
@@ -56,7 +55,8 @@ def parse(grammar_code, input):
         "pos": 0, # cursor position
     }
     start = env["rules"]["$start"]
-    return eval(start, env)
+    result = eval(start, env)
+    return (result, env["pos"])
 
 def eval(exp, env):
     print(exp, exp[0])
@@ -81,18 +81,19 @@ def seq(exp, env):
     return True
 
 def alt(exp, env):
+    start = env["pos"]
     for arg in exp[1]:
         if eval(arg, env): return True
+        env["pos"] = start
     return False
 
 def sq(exp, env):
-    pos = env["pos"]
     input = env["input"]
     end = len(input)
     for c in exp[1][1:-1]:
+        pos = env["pos"]
         if pos >= end or c != input[pos]: return False
-        pos += 1
-    env["pos"] = pos
+        env["pos"] = pos+1
     return True
 
 
@@ -100,9 +101,11 @@ print( parse(date_code, "2021-03-04") ) # eval exp ...
 
 """  Impementation Notes:
 
-TODO seq does not correct the current pos after a failure
+seq does not correct the current pos after a failure
 
-alt assumes the current pos is correct after a failure
+alt resets the current pos after a failure
+
+sq does not correct the current pos after a failure
 
 sq needs to check for end of input
 
