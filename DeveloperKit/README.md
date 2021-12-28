@@ -1,3 +1,15 @@
+
+Fault reporting
+
+Max pos can be tracked in sq, dq, chs, but if instruction faillures do NOT reset the pos except in an alt instruction if there is another alternative to try, then the max pos can be recorded in the alt rule. The pos does get reset in the pre instruction, assuming that what happens inside the lookahead predicates can be ignored.
+
+The only other place the pos may need to be reset is the rep instruction when the last iteration of a repeat loop fails but the repeat count is sufficient for the instruction to return true.
+
+
+
+
+
+
 #   A pPEG Parser Machine Developer Kit
 
 This directory contains JavaScript code samples for the incremental development of a pPEG parser machine, as explained in [pPEG-machine].

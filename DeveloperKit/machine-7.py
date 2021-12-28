@@ -52,19 +52,6 @@ def _parse(code, input):
     trace_pos = -1
     line_map = None
 
-    def eval(exp):
-        instruct = {
-            "id": id,
-            "seq": seq,
-            "alt": alt,
-            "rep": rep,
-            "pre": pre,
-            "sq": sq,
-            "dq": dq,
-            "chs": chs
-        }
-        return instruct[exp[0]](exp)
-
     def id(exp):
         nonlocal tree, depth, in_rule, err
         if trace: trace_report(exp)
@@ -73,14 +60,14 @@ def _parse(code, input):
         name = exp[1]
         expr = code.get(name)
         if not expr:
-            err += f"undefined rule: {name}"
+            err += f"undefined rule: {name} "
             return False
         if depth == max_depth:
-            err += f"recursion max-depth exceeded in: {name}"
+            err += f"recursion max-depth exceeded in: {name} "
             return False
         in_rule = name
         depth += 1
-        result = eval(expr)
+        result = op[expr[0]](expr) # eval(expr) # 
         depth -= 1
         if not result: return False
         size = len(tree)
@@ -98,7 +85,8 @@ def _parse(code, input):
     def seq(exp):
         start = pos
         for arg in exp[1]:
-            if not eval(arg): return False
+            if not op[arg[0]](arg): return False
+            # if not eval(arg): return False
         return True
 
     def alt(exp):
@@ -106,7 +94,8 @@ def _parse(code, input):
         start = pos
         stack = len(tree)
         for arg in exp[1]:
-            if eval(arg): return True
+            if op[arg[0]](arg): return True
+            # if eval(arg): return True
             if pos > start and pos > peak_fail:
                 peak_fail = pos
                 peak_rule = in_rule
@@ -115,16 +104,20 @@ def _parse(code, input):
         return False
 
     def rep(exp):
-        nonlocal pos, tree
         [_rep, [expr, [_sfx, sfx]]] = exp
         min, max = 0, 0  # sfx == "*" 
         if  sfx == "+": min = 1
         elif sfx == "?": max = 1
+        return rep_(["rep_", expr, min, max])
+        
+    def rep_(exp):
+        nonlocal pos, tree
+        [_, expr, min, max] = exp
         count = 0
         while True:
             start = pos
             stack = len(tree)
-            result = eval(expr)
+            result = op[expr[0]](expr)  # eval(expr) 
             if result == False: break
             if pos == start: break # no progress
             count += 1
@@ -140,7 +133,7 @@ def _parse(code, input):
         [_pre, [[_pfx, sign], term]] = exp
         start = pos
         stack = len(tree)
-        result = eval(term)
+        result = op[term[0]](term) # eval(term) # 
         if len(tree) > stack: tree = tree[0:stack]
         pos = start # reset
         if sign == "~":
@@ -163,7 +156,12 @@ def _parse(code, input):
         for c in exp[1][1:-1]:
             if pos >= end: return False
             if c == " ":
-                while pos < end and input[pos] <= " ": pos += 1
+                space = code.get("_space_")
+                if space:
+                    if not op[space[0]](space): return False
+                    # if not eval(space): return False
+                else:
+                    while pos < end and input[pos] <= " ": pos += 1
                 continue
             if c != input[pos]: return False
             pos += 1
@@ -188,6 +186,35 @@ def _parse(code, input):
             return True
         return False
 
+    def chs_(exp):
+        nonlocal pos, tree
+        if pos >= end: return False
+        [_, str, min, max] = exp
+        n = len(str)
+        start, count = pos, 0
+        while pos < end:
+            ch = input[pos]
+            i = 1 # "[...]"
+            while i < n-1:       
+                if i+2 < n-1 and str[i+1] == '-':
+                    if ch < str[i] or ch > str[i+2]:
+                        i += 3
+                        continue
+                elif ch != str[i]: 
+                    i += 1
+                    continue
+                pos += 1           
+                break
+            if pos == start: break # fail, no further progress
+            start = pos
+            count += 1
+            if count == max: break # max 0 means any
+        if count < min: return False
+        return True
+        
+
+    # -- utils ------------------------------------------------
+
     def trace_report(exp):
         nonlocal err, trace_pos, line_map
         if exp[0] != "id": return
@@ -196,8 +223,6 @@ def _parse(code, input):
             return
         trace_pos = pos
         trace_report += f"{line_report(input, pos)} {exp[1]}"
-
-    # -- utils ------------------------------------------------
 
     def line_report(input, pos):
         num = " "+line_col(input, pos)+": "
@@ -231,7 +256,21 @@ def _parse(code, input):
 
     # -- _parse ---------------------------------------
 
-    result = eval(code["$start"])
+    op = {
+        "id": id,
+        "seq": seq,
+        "alt": alt,
+        "rep": rep,
+        "rep_": rep_,
+        "pre": pre,
+        "sq": sq,
+        "dq": dq,
+        "chs": chs,
+        "chs_": chs_,
+    }
+
+    result = id(code["$start"])
+
     if trace:
         print(err)
     if pos < end:
@@ -244,20 +283,58 @@ def _parse(code, input):
             err += "fell short at:"
             result = False
         err += f"{line_report(input, pos)} {details}"
+    if not result: return Peg(result, err, tree)
     return Peg(result, err, tree[0])
 
 # -- compile parser code -----------------------------------------------------------
 
 def _compile(ptree): # ptree -> code
-    code = {}        # trivial skeleton for simple interpreter instructions
+
+    def emit_id(exp):
+        rule = code.get(exp[1])
+        if not rule:
+            raise Exception("missing rule: "+name)
+        return exp
+
+    def emit_seq(exp):
+        return ["seq", list(map(optimize, exp[1]))]
+    def emit_alt(exp):
+        return ["alt", list(map(optimize, exp[1]))]
+
+    def emit_rep(exp):
+        [_rep, [expr, [_sfx, sfx]]] = exp
+        min, max = 0, 0  # sfx == "*" 
+        if  sfx == "+": min = 1
+        elif sfx == "?": max = 1
+        if expr[0] == "chs":
+            return ["chs_", expr[1], min, max]
+        return ["rep_", expr, min, max]
+
+    emiter = {
+        "id": emit_id,
+        "seq": emit_seq,
+        "alt": emit_alt,
+        "rep": emit_rep,
+    }
+
+    def optimize(exp):
+        emit = emiter.get(exp[0])
+        if emit: return emit(exp)
+        return exp
+
+    code = {}
     for rule in ptree[1]:
         [_rule, [[_id, name], exp]] = rule
         code[name] = exp
+
+    for name in code:
+        code[name] = optimize(code[name])
+
     [_rule, [[_id, start], _exp]] = ptree[1][0]
     code["$start"] = ["id", start]
     return code
 
-pPEG_code = _compile(pPEG_ptree)  #; print(pPEG_code)
+pPEG_code = _compile(pPEG_ptree) # ; print(pPEG_code)
 
 # -- pPEG.compile grammar API ----------------------------------------------------------
 
@@ -285,41 +362,65 @@ class Peg:
 
 # -- test ----------------------------------------
 
-date = compile("""
+def test():
+    # peg = compile(pPEG_grammar)
+    date = compile("""
     date  = year '-' month '-' day
     year  = [0-9]+
     month = [0-9]+
     day   = [0-9]+
-""")
+    """)
 
-print( date.parse("2012-03-04") )
+if __name__ == '__main__':
+    date = compile("""
+    # yes we have comments...
+    date  = year '-' month '-' day
+    year  = [0-9]+
+    month = [0-9]+
+    day   = [0-9]+
+    """)
 
+    print( date.parse("2012-03-04") )
+
+    # import scalene
+    # scalene_profiler.start()
+    # test()
+    # scalene_.profiler.stop()
+
+
+    # import timeit
+    # number = 10000
+    # print("timeit bench mark x"+str(number))
+    # print(timeit.timeit("test()", number=number, globals=locals()))
 
 """  Impementation Notes:
 
-Uses pPEG ptree from step 5
+Done: _compile optimizations
+    - check all grammar rule names are defined
+    - use instruction functions and eliminate eval(exp)
 
-Uses parser machine from step 5
+Using eval():
+    3.0  ms to compile(pPEG_grammar)
+    0.46 ms to compile(date)
 
-Add: fault reports
-    - missing rule name
-    - max recusion depth
-    - failures in alt, with in_rule
+Using eval(): but with construct-once instruct dict....
+    2.1  ms to compile(pPEG_grammar)
+    0.31 ms to compile(date)
 
-Add: Peg class for return values: {ok, err, ptree, parse}
+Using op[exp[0]](exp): ---  on iMac M1
+    1.72 ms  to compile(pPEG_grammar) 1.69 with min, max rep_, 1.66 with chs_
+    0.26 ms to compile(date) 0.25 with min,max rep_, 0.24 with chs_
 
-Add: API pEPG.compile(grammar), and Peg.parse(input)   
-    - _parse private interal parser machine 
-    - _compile private internal ptree -> code
+Using op[exp[0]](exp): --- on MacBook 2017 1.3GH i5
+    3.66 ms  to compile(pPEG_grammar)
+    0.55 ms to compile(date)
+
 
 TODO extra features in pPEG
-    - _space_ to enable comments
     - numeric repeat range
     - case insensitive string matching
 
 TODO: _compile optimizations
-    - check all grammar rule names are defined
-    - use instruction functions and eliminate eval(exp)
     - compile repeat *+? into max min values for rep instruction
     - extend other instructions with min, max repeats and ~ negation
     - compute an first-char guard for the alt instruction

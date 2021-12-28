@@ -48,53 +48,48 @@ date_code = {
     "$start": ["id", "date"]
 }
 
-def parse(grammar_code, input):
-    env = {
-        "rules": grammar_code,
-        "input": input,
-        "pos": 0, # cursor position
-    }
-    start = env["rules"]["$start"]
-    result = eval(start, env)
-    return (result, env["pos"])
-
-def eval(exp, env):
-    print(exp, exp[0])
-    instruct = {
-        "id": id,
-        "seq": seq,
-        "alt": alt,
-        "sq": sq
-    }
-    return instruct[exp[0]](exp, env)
-
-def id(exp, env):
-    name = exp[1]
-    expr = env["rules"][name]
-    if not expr: raise Exception("undefined rule: "+name)
-    return eval(expr, env)
-
-
-def seq(exp, env):
-    for arg in exp[1]:
-        if not eval(arg, env): return False
-    return True
-
-def alt(exp, env):
-    start = env["pos"]
-    for arg in exp[1]:
-        if eval(arg, env): return True
-        env["pos"] = start
-    return False
-
-def sq(exp, env):
-    input = env["input"]
+def parse(code, input):
+    pos = 0
     end = len(input)
-    for c in exp[1][1:-1]:
-        pos = env["pos"]
-        if pos >= end or c != input[pos]: return False
-        env["pos"] = pos+1
-    return True
+
+    def eval(exp):
+        print(exp, exp[0])
+        instruct = {
+            "id": id,
+            "seq": seq,
+            "alt": alt,
+            "sq": sq
+        }
+        return instruct[exp[0]](exp)
+
+    def id(exp):
+        name = exp[1]
+        expr = code[name]
+        return eval(expr)
+
+    def seq(exp):
+        for arg in exp[1]:
+            if not eval(arg): return False
+        return True
+
+    def alt(exp):
+        nonlocal pos
+        start = pos
+        for arg in exp[1]:
+            if eval(arg): return True
+            pos = start
+        return False
+
+    def sq(exp):
+        nonlocal pos
+        for c in exp[1][1:-1]:
+            if pos >= end or c != input[pos]: return False
+            pos += 1
+        return True
+
+    result = eval(code["$start"])
+    return (result, pos)
+
 
 
 print( parse(date_code, "2021-03-04") ) # eval exp ...
