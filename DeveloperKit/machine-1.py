@@ -48,47 +48,52 @@ date_code = {
     "$start": ["id", "date"]
 }
 
+class Env():
+    def __init__(self, code, input):
+        self.code = code
+        self.input = input
+        self.pos = 0
+        self.end = len(input)
+
 def parse(code, input):
-    pos = 0
-    end = len(input)
+    env = Env(code, input)
+    result = eval(code["$start"], env)
+    return (result, env.pos)
 
-    def eval(exp):
-        print(exp, exp[0])
-        instruct = {
-            "id": id,
-            "seq": seq,
-            "alt": alt,
-            "sq": sq
-        }
-        return instruct[exp[0]](exp)
+def id(exp, env):
+    name = exp[1]
+    expr = env.code[name]
+    return eval(expr, env)
 
-    def id(exp):
-        name = exp[1]
-        expr = code[name]
-        return eval(expr)
+def seq(exp, env):
+    for arg in exp[1]:
+        if not eval(arg, env): return False
+    return True
 
-    def seq(exp):
-        for arg in exp[1]:
-            if not eval(arg): return False
-        return True
+def alt(exp, env):
+    start = env.pos
+    for arg in exp[1]:
+        if eval(arg, env): return True
+        env.pos = start
+    return False
 
-    def alt(exp):
-        nonlocal pos
-        start = pos
-        for arg in exp[1]:
-            if eval(arg): return True
-            pos = start
-        return False
+def sq(exp, env):
+    for c in exp[1][1:-1]:
+        if env.pos >= env.end or c != env.input[env.pos]:
+            return False
+        env.pos += 1
+    return True
 
-    def sq(exp):
-        nonlocal pos
-        for c in exp[1][1:-1]:
-            if pos >= end or c != input[pos]: return False
-            pos += 1
-        return True
+instruct = {
+    "id": id,
+    "seq": seq,
+    "alt": alt,
+    "sq": sq
+}
 
-    result = eval(code["$start"])
-    return (result, pos)
+def eval(exp, env):
+    print(exp, exp[0])
+    return instruct[exp[0]](exp, env)
 
 
 
