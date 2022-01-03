@@ -53,6 +53,17 @@ boot_ptree = ["Peg",[
         ["sfx","*"]]],["sq","']'"]]]]],
     ["rule",[["id","group"],["seq",[["dq","\"( \""],["id","alt"],["dq","\" )\""]]]]]]]
 
+class Peg: # parse result...
+    def __init__(self, ok, err, ptree, parse = None):
+        self.ok = ok
+        self.err = err
+        self.ptree = ptree
+        self.parse = parse
+    def __repr__(self):
+        if self.ok: return f"{self.ptree}"
+        return f"{self.err}"
+        # return f"Peg(ok: {self.ok}, err: {self.err}, ptree: {self.ptree})" 
+
 class Env(): # parser machine environment...
     def __init__(self, code, input):
         self.code = code
@@ -64,17 +75,6 @@ class Env(): # parser machine environment...
         self.trace = False
         self.trace_pos = -1
         self.line_map = None
-
-class Peg: # parse result...
-    def __init__(self, ok, err, ptree, parse = None):
-        self.ok = ok
-        self.err = err
-        self.ptree = ptree
-        self.parse = parse
-    def __repr__(self):
-        if self.ok: return f"{self.ptree}"
-        return f"{self.err}"
-        # return f"Peg(ok: {self.ok}, err: {self.err}, ptree: {self.ptree})" 
 
 def parse(code, input):
     env = Env(code, input)
@@ -105,8 +105,14 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
+    start = env.pos
+    stack = len(env.tree)
     for arg in exp[1]:
-        if not eval(arg, env): return False
+        if not eval(arg, env):
+            if len(env.tree) > stack:
+                env.tree = env.tree[0:stack]       
+            env.pos = start 
+            return False
     return True
 
 def alt(exp, env):
@@ -239,7 +245,7 @@ def make_line_map(input):
     line_map.append(len(input)+1) # eof after end
     return line_map
 
-# -- compiler --------------------------------------------------------------
+# -- ptree -> code compiler ------------------------------------------------
 
 def _compile(ptree): # ptree -> code
     code = {}        # trivial skeleton for simple interpreter instructions

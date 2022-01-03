@@ -1,5 +1,5 @@
     
-import pPEG  # >export PYTHONPATH=.../pPEGpy/
+import pPEG  # > export PYTHONPATH=.../pPEGpy/
 
 pPEG_grammar = """
     Peg   = " " (rule " ")+

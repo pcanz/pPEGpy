@@ -66,14 +66,18 @@ def id(exp, env):
     return eval(expr, env)
 
 def seq(exp, env):
+    start = env.pos
     for arg in exp[1]:
-        if not eval(arg, env): return False
+        if not eval(arg, env):
+            env.pos = start
+            return False
     return True
 
 def alt(exp, env):
     start = env.pos
     for arg in exp[1]:
-        if eval(arg, env): return True
+        if eval(arg, env):
+            return True
         env.pos = start
     return False
 
@@ -101,11 +105,7 @@ print( parse(date_code, "2021-03-04") ) # eval exp ...
 
 """  Impementation Notes:
 
-seq does not correct the current pos after a failure
-
-alt resets the current pos after a failure
-
-sq does not correct the current pos after a failure
+seq and alt reset the current pos after a failure
 
 sq needs to check for end of input
 

@@ -34,7 +34,18 @@ pPEG_grammar = """
 
 pPEG_ptree = ["Peg", [["rule", [["id", "Peg"], ["seq", [["dq", "\" \""], ["rep", [["seq", [["id", "rule"], ["dq", "\" \""]]], ["sfx", "+"]]]]]]], ["rule", [["id", "rule"], ["seq", [["id", "id"], ["dq", "\" = \""], ["id", "alt"]]]]], ["rule", [["id", "alt"], ["seq", [["id", "seq"], ["rep", [["seq", [["dq", "\" / \""], ["id", "seq"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "seq"], ["seq", [["id", "rep"], ["rep", [["seq", [["dq", "\" \""], ["id", "rep"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "rep"], ["seq", [["id", "pre"], ["rep", [["id", "sfx"], ["sfx", "?"]]]]]]], ["rule", [["id", "pre"], ["seq", [["rep", [["id", "pfx"], ["sfx", "?"]]], ["id", "term"]]]]], ["rule", [["id", "term"], ["alt", [["id", "call"], ["id", "sq"], ["id", "dq"], ["id", "chs"], ["id", "group"], ["id", "extn"]]]]], ["rule", [["id", "id"], ["seq", [["chs", "[a-zA-Z_]"], ["rep", [["chs", "[a-zA-Z0-9_]"], ["sfx", "*"]]]]]]], ["rule", [["id", "pfx"], ["chs", "[&!~]"]]], ["rule", [["id", "sfx"], ["alt", [["chs", "[+?]"], ["seq", [["sq", "'*'"], ["rep", [["id", "range"], ["sfx", "?"]]]]]]]]], ["rule", [["id", "range"], ["seq", [["id", "num"], ["rep", [["seq", [["id", "dots"], ["rep", [["id", "num"], ["sfx", "?"]]]]], ["sfx", "?"]]]]]]], ["rule", [["id", "num"], ["rep", [["chs", "[0-9]"], ["sfx", "+"]]]]], ["rule", [["id", "dots"], ["sq", "'..'"]]], ["rule", [["id", "call"], ["seq", [["id", "id"], ["pre", [["pfx", "!"], ["dq", "\" =\""]]]]]]], ["rule", [["id", "sq"], ["seq", [["dq", "\"'\""], ["rep", [["pre", [["pfx", "~"], ["dq", "\"'\""]]], ["sfx", "*"]]], ["dq", "\"'\""], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "dq"], ["seq", [["sq", "'\"'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'\"'"]]], ["sfx", "*"]]], ["sq", "'\"'"], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "chs"], ["seq", [["sq", "'['"], ["rep", [["pre", [["pfx", "~"], ["sq", "']'"]]], ["sfx", "*"]]], ["sq", "']'"]]]]], ["rule", [["id", "group"], ["seq", [["dq", "\"( \""], ["id", "alt"], ["dq", "\" )\""]]]]], ["rule", [["id", "extn"], ["seq", [["sq", "'<'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'>'"]]], ["sfx", "*"]]], ["sq", "'>'"]]]]], ["rule", [["id", "_space_"], ["rep", [["alt", [["seq", [["sq", "'#'"], ["rep", [["pre", [["pfx", "~"], ["chs", "[\n\r]"]]], ["sfx", "*"]]]]], ["rep", [["chs", "[ \t\n\r]"], ["sfx", "+"]]]]], ["sfx", "*"]]]]]]]
 
+class Peg: # parse result...
+    """ pPEG.compile(grammar) result, or Peg.parse(input) result """
+    def __init__(self, ok, err, ptree, parse = None):
+        self.ok = ok       # boolean
+        self.err = err     # error string
+        self.ptree = ptree # pPEG parse tree
+        self.parse = parse # input -> Peg
 
+    def __repr__(self):
+        if self.ok: return f"{self.ptree}"
+        return f"{self.err}"
+ 
 class Env(): # parser machine environment...
     def __init__(self, code, input):
         self.code = code
@@ -54,17 +65,6 @@ class Env(): # parser machine environment...
         self.trace = False
         self.trace_pos = -1
         self.line_map = None
-
-class Peg: # parse result...
-    def __init__(self, ok, err, ptree, parse = None):
-        self.ok = ok
-        self.err = err
-        self.ptree = ptree
-        self.parse = parse
-    def __repr__(self):
-        if self.ok: return f"{self.ptree}"
-        return f"{self.err}"
-        # return f"Peg(ok: {self.ok}, err: {self.err}, ptree: {self.ptree})" 
 
 def _parse(code, input):
     env = Env(code, input)
@@ -115,8 +115,17 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
+    start = env.pos
+    stack = len(env.tree)
     for arg in exp[1]:
-        if not arg[0](arg, env): return False
+        if not arg[0](arg, env):
+            if env.pos > start and env.pos > env.peak_fail:
+                env.peak_fail = env.pos
+                env.peak_rule = env.in_rule
+            if len(env.tree) > stack:
+                env.tree = env.tree[0:stack]       
+            env.pos = start 
+            return False
     return True
 
 def alt(exp, env):
@@ -291,7 +300,7 @@ def make_line_map(input):
     line_map.append(len(input)+1) # eof after end
     return line_map
 
-# -- compile parser code -----------------------------------------------------------
+# -- ptree -> code  compile parser code ------------------------
 
 def _compile(ptree): # ptree -> code
 
@@ -367,6 +376,7 @@ pPEG_code = _compile(pPEG_ptree) # ; print(pPEG_code)
 # -- pPEG.compile grammar API ----------------------------------------------------------
 
 def compile(grammar):
+    """ pPEG.compile grammar -> Peg parser """
     peg = _parse(pPEG_code, grammar)
     if not peg.ok:
         peg.err = "grammar error: "+peg.err
@@ -408,7 +418,7 @@ if __name__ == '__main__':
         p = quote.parse('"01234567890123456789012345678901234567890123456789"')
 
     import timeit
-    tests = [["pPEG_test()", 1000]] #, ["date_test()", 10000], ["quote_test()", 100000]]
+    tests = [["pPEG_test()", 1000], ["date_test()", 10000], ["quote_test()", 100000]]
     for t in tests:
         print(t[0]+" x"+str(t[1]))
         print(timeit.timeit(t[0], number=t[1], globals=locals()))
@@ -417,9 +427,10 @@ if __name__ == '__main__':
 
 Added: 
     - _space_ in dq
+
     _compile optimizations
         - check all grammar rule names are defined
-        - use instruction functions to eliminate eval(exp)
+        - use instruction function vars to eliminate eval(exp)
         - compile repeat *+? into max min values for rep instruction
         - extend chs to chs_ with min, max repeats and ~ negation
 
@@ -449,7 +460,7 @@ Using op[exp[0]](exp):
 TODO extra features in pPEG
     - numeric repeat range
     - case insensitive string matching
-    = grammar raw string escape codes
+    - grammar raw string escape codes
 
 TODO:
     - err reporting

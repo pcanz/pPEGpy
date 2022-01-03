@@ -80,15 +80,22 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
+    start = env.pos
+    stack = len(env.tree)
     for arg in exp[1]:
-        if not eval(arg, env): return False
+        if not eval(arg, env):
+            if len(env.tree) > stack:
+                env.tree = env.tree[0:stack]
+            env.pos = start       
+            return False
     return True
 
 def alt(exp, env):
     start = env.pos
     stack = len(env.tree)
     for arg in exp[1]:
-        if eval(arg, env): return True
+        if eval(arg, env):
+            return True
         if len(env.tree) > stack:
             env.tree = env.tree[0:stack]       
         env.pos = start
@@ -118,7 +125,7 @@ print( parse(date_code, "2021-03-04") ) # eval exp ...
 
 Add parse tree building in id rule.
 
-Add reset tree in alt
+Add reset tree in seq and alt
 
 TODO: upper case rule names and anon underscore rule names.
 

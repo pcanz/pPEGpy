@@ -107,10 +107,16 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
+    start = env.pos
+    stack = len(env.tree)
     for arg in exp[1]:
-        if not eval(arg, env): return False
+        if not eval(arg, env):
+            if len(env.tree) > stack:
+                env.tree = env.tree[0:stack]       
+            env.pos = start 
+            return False
     return True
-
+    
 def alt(exp, env):
     start = env.pos
     stack = len(env.tree)

@@ -1,8 +1,16 @@
 """
-    pPEG in Python
+    pPEG is a portable PEG grammar parser generator
 
     This is the only file you need.
 
+    pPEG.compile(grammar) -> <Peg>
+
+    <Peg>.parse(input) -> <Peg> 
+
+    Peg .ok boolean 
+        .err string
+        .ptree parse tree
+        .parse input -> Peg
 """
 
 pPEG_grammar = """
@@ -34,7 +42,18 @@ pPEG_grammar = """
 
 pPEG_ptree = ["Peg", [["rule", [["id", "Peg"], ["seq", [["dq", "\" \""], ["rep", [["seq", [["id", "rule"], ["dq", "\" \""]]], ["sfx", "+"]]]]]]], ["rule", [["id", "rule"], ["seq", [["id", "id"], ["dq", "\" = \""], ["id", "alt"]]]]], ["rule", [["id", "alt"], ["seq", [["id", "seq"], ["rep", [["seq", [["dq", "\" / \""], ["id", "seq"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "seq"], ["seq", [["id", "rep"], ["rep", [["seq", [["dq", "\" \""], ["id", "rep"]]], ["sfx", "*"]]]]]]], ["rule", [["id", "rep"], ["seq", [["id", "pre"], ["rep", [["id", "sfx"], ["sfx", "?"]]]]]]], ["rule", [["id", "pre"], ["seq", [["rep", [["id", "pfx"], ["sfx", "?"]]], ["id", "term"]]]]], ["rule", [["id", "term"], ["alt", [["id", "call"], ["id", "sq"], ["id", "dq"], ["id", "chs"], ["id", "group"], ["id", "extn"]]]]], ["rule", [["id", "id"], ["seq", [["chs", "[a-zA-Z_]"], ["rep", [["chs", "[a-zA-Z0-9_]"], ["sfx", "*"]]]]]]], ["rule", [["id", "pfx"], ["chs", "[&!~]"]]], ["rule", [["id", "sfx"], ["alt", [["chs", "[+?]"], ["seq", [["sq", "'*'"], ["rep", [["id", "range"], ["sfx", "?"]]]]]]]]], ["rule", [["id", "range"], ["seq", [["id", "num"], ["rep", [["seq", [["id", "dots"], ["rep", [["id", "num"], ["sfx", "?"]]]]], ["sfx", "?"]]]]]]], ["rule", [["id", "num"], ["rep", [["chs", "[0-9]"], ["sfx", "+"]]]]], ["rule", [["id", "dots"], ["sq", "'..'"]]], ["rule", [["id", "call"], ["seq", [["id", "id"], ["pre", [["pfx", "!"], ["dq", "\" =\""]]]]]]], ["rule", [["id", "sq"], ["seq", [["dq", "\"'\""], ["rep", [["pre", [["pfx", "~"], ["dq", "\"'\""]]], ["sfx", "*"]]], ["dq", "\"'\""], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "dq"], ["seq", [["sq", "'\"'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'\"'"]]], ["sfx", "*"]]], ["sq", "'\"'"], ["rep", [["sq", "'i'"], ["sfx", "?"]]]]]]], ["rule", [["id", "chs"], ["seq", [["sq", "'['"], ["rep", [["pre", [["pfx", "~"], ["sq", "']'"]]], ["sfx", "*"]]], ["sq", "']'"]]]]], ["rule", [["id", "group"], ["seq", [["dq", "\"( \""], ["id", "alt"], ["dq", "\" )\""]]]]], ["rule", [["id", "extn"], ["seq", [["sq", "'<'"], ["rep", [["pre", [["pfx", "~"], ["sq", "'>'"]]], ["sfx", "*"]]], ["sq", "'>'"]]]]], ["rule", [["id", "_space_"], ["rep", [["alt", [["seq", [["sq", "'#'"], ["rep", [["pre", [["pfx", "~"], ["chs", "[\n\r]"]]], ["sfx", "*"]]]]], ["rep", [["chs", "[ \t\n\r]"], ["sfx", "+"]]]]], ["sfx", "*"]]]]]]]
 
+class Peg: # parse result...
+    """ pPEG.compile(grammar) result, or Peg.parse(input) result """
+    def __init__(self, ok, err, ptree, parse = None):
+        self.ok = ok       # boolean
+        self.err = err     # error string
+        self.ptree = ptree # pPEG parse tree
+        self.parse = parse # input -> Peg
 
+    def __repr__(self):
+        if self.ok: return f"{self.ptree}"
+        return f"{self.err}"
+ 
 class Env(): # parser machine environment...
     def __init__(self, code, input):
         self.code = code
@@ -46,25 +65,15 @@ class Env(): # parser machine environment...
 
         self.depth = -1
         self.max_depth = 100
-        self.in_rule = None
+        self.in_rule = [None]*self.max_depth
 
         self.peak_fail = -1
         self.peak_rule = None
+        self.peak_expect = None
 
         self.trace = False
         self.trace_pos = -1
         self.line_map = None
-
-class Peg: # parse result...
-    def __init__(self, ok, err, ptree, parse = None):
-        self.ok = ok
-        self.err = err
-        self.ptree = ptree
-        self.parse = parse
-    def __repr__(self):
-        if self.ok: return f"{self.ptree}"
-        return f"{self.err}"
-        # return f"Peg(ok: {self.ok}, err: {self.err}, ptree: {self.ptree})" 
 
 def _parse(code, input):
     env = Env(code, input)
@@ -76,11 +85,11 @@ def _parse(code, input):
     if pos < env.end or not result:
         err += "parse failed: "
         details = ""
-        if env.peak_fail > pos:
+        if env.peak_fail >= pos:
             pos = env.peak_fail
-            details = f"{peak_rule} "
+            details = f"{env.peak_rule} {expected(env.peak_expect)} "
         else:
-            details = f"{env.in_rule} "
+            details = f"{env.peak_rule or env.in_rule[0]} "
         if result:
             err += "fell short at:"
             result = False
@@ -99,8 +108,8 @@ def id(exp, env):
     if env.depth == env.max_depth:
         env.err += f"recursion max-depth exceeded in: {name} "
         return False
-    env.in_rule = name
     env.depth += 1
+    env.in_rule[env.depth] = name
     result = expr[0](expr, env)
     env.depth -= 1
     if not result: return False
@@ -117,8 +126,18 @@ def id(exp, env):
     return True  # elide redundant rule name
 
 def seq(exp, env):
+    start = env.pos
+    stack = len(env.tree)
     for arg in exp[1]:
-        if not arg[0](arg, env): return False
+        if not arg[0](arg, env):
+            if env.pos > start and env.pos > env.peak_fail:
+                env.peak_fail = env.pos
+                env.peak_rule = env.in_rule[env.depth]
+                env.peak_expect = arg
+            if len(env.tree) > stack:
+                env.tree = env.tree[0:stack]
+            env.pos = start      
+            return False
     return True
 
 def alt(exp, env):
@@ -126,9 +145,9 @@ def alt(exp, env):
     stack = len(env.tree)
     for arg in exp[1]:
         if arg[0](arg, env): return True
-        if env.pos > start and env.pos > env.peak_fail:
-            env.peak_fail = env.pos
-            env.peak_rule = env.in_rule
+        # if env.pos > start and env.pos > env.peak_fail:
+        #     env.peak_fail = env.pos
+        #     env.peak_rule = env.in_rule[env.depth]
         if len(env.tree) > stack:
             env.tree = env.tree[0:stack]       
         env.pos = start
@@ -312,7 +331,10 @@ def line_report(env, pos):
     if pos+35 < len(input): after = input[pos:pos+30]+" ..."
     line = "\n"
     for c in before+after:
-        if c < " ": c = " "
+        if c < " ":
+            if c == "\n": c = '¬'
+            elif c == "\t": c = '·'
+            else: c = " "
         line += c
     return line+inset+"^"
 
@@ -329,14 +351,74 @@ def make_line_map(input):
     line_map.append(len(input)+1) # eof after end
     return line_map
 
+# -- display expr ---------------------------------------------
+
+def expected(exp):
+    expect = display(exp)
+    if not expect: return ''
+    return f" expected: {expect}"
+
+op_display = {
+    "id": lambda exp: exp[1],
+    "seq": lambda exp: ' '.join(list(map(display,exp[1]))),
+    "alt": lambda exp: '/'.join(list(map(display,exp[1]))),
+    "rep": lambda exp: show_rep(exp),
+    "rep_": lambda exp: show_rep_(exp),
+    "pre": lambda exp: show_pre(exp),
+    "sq": lambda exp: exp[1],
+    "dq": lambda exp: exp[1],
+    "sq_": lambda exp: f"'{exp[1]}'",
+    "dq_": lambda exp: f'"{exp[1]}"',
+    "chs": lambda exp: exp[1],
+    "chs_": lambda exp: show_chs_(exp),
+}
+
+def display(exp):
+    name = exp[0].__name__ 
+    show = op_display.get(name)
+    if not show: return ''
+    return show(exp)
+
+def show_rep(exp):  # e*
+    [_rep, [expr, [_sfx, sfx]]] = exp
+    return f"{display(expr)}{sfx}"
+
+def show_rep_(exp):  # e*
+    [_, expr, min, max] = exp
+    return f"{display(expr)}{sfx(min,max)}"
+
+def show_pre(exp):  # !e
+    [_pre, [[_pfx, sign], term]] = exp
+    return f"{display(term)}"
+
+def show_chs_(exp):  # ~[x]*
+    [_chs, str, neg, min, max] = exp
+    if neg: return f"~{str}{sfx(min,max)}"
+    return f"~{str}{sfx(min,max)}"
+
+def sfx(min, max):
+    if min == 1 and max == 1: return ''
+    if min == 0 and max == 0: return "*"
+    if min == 1 and max == 0: return "+"
+    if min == 0 and max == 1: return "?"
+    if max == 0: return f"*{min}.."
+    return f"*{min}..{max}"
+
 # -- compile parser code -----------------------------------------------------------
 
 def _compile(ptree): # ptree -> code
+    code = {}
+    for rule in ptree[1]:
+        [_rule, [[_id, name], exp]] = rule
+        code[name] = exp
+    
+    code["$err"] = ""
 
     def emit_id(exp):
         rule = code.get(exp[1])
         if not rule:
-            raise Exception("missing rule: "+name)
+            code["$err"] += "missing rule: "+name+"\n"
+            #raise Exception("missing rule: "+name)
         return [op[exp[0]], exp[1]]
 
     def emit_seq(exp):
@@ -392,19 +474,6 @@ def _compile(ptree): # ptree -> code
         if icase: return [op[exp[0]+'_'], str, True]
         return [op[exp[0]+'_'], str]
 
-    # def escape_codes(str):
-    #     return 
-    #     return str
-
-    # bytes(myString, "utf-8").decode("unicode_escape")
-    # function sq_dq(fx, txt) {
-    #     let icase = txt.slice(-1) === "i";
-    #     let str = icase? txt.slice(1,-2) : txt.slice(1,-1);
-    #     str = escape_codes(str);
-    #     if (icase) str = str.toUpperCase();
-    #     return [fx, icase, str];
-    # };
-    
     def emit_leaf(exp):
         return [op[exp[0]], exp[1]]
 
@@ -422,11 +491,6 @@ def _compile(ptree): # ptree -> code
     def optimize(exp):
         return emiter[exp[0]](exp)
 
-    code = {}
-    for rule in ptree[1]:
-        [_rule, [[_id, name], exp]] = rule
-        code[name] = exp
-
     for name in code:
         code[name] = optimize(code[name])
 
@@ -439,12 +503,14 @@ pPEG_code = _compile(pPEG_ptree) # ; print(pPEG_code)
 # -- pPEG.compile grammar API ----------------------------------------------------------
 
 def compile(grammar):
+    """ pPEG.compile function returns a pPEG.Peg parser object """
     peg = _parse(pPEG_code, grammar)
     if not peg.ok:
         peg.err = "grammar error: "+peg.err
         peg.parse = lambda _ : peg
         return peg
     code = _compile(peg.ptree)
+    if code["$err"]: return Peg(False, code["$err"], peg, lambda _ : peg)
     return Peg(True, None, peg, lambda input: _parse(code, input))
 
 
