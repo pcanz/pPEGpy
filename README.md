@@ -2,7 +2,7 @@
 
 This is an implementation of [pPEG] in Python.
 
-A single file Python module with no dependencies.
+pPEG.py is a single file Python module with no dependencies.
 
 ##  Example
 
@@ -38,24 +38,26 @@ else: print(uri.err)
 
 The pPEG.py implementation is a single file with no dependencies.
 
-Put a copy of the pPEG.py file into the same directory as your application, or use a PYTHONPATH shell environment variable for Python3 to load the pPEG.py module.
+Put a copy of the pPEG.py file into the same directory as your application, or use a PYTHONPATH shell environment variable for Python to load the pPEG.py module.
 
 Not yet available for `pip` install.
 
 Basic usage:
-    
+
+``` py    
     import pPEG
 
     my_parser = pPEG.compile(""... my grammar rules...""")
 
-For the grammar rules see the [pPEG] documentation, then:
+    # For the grammar rules see the [pPEG] documentation, then:
 
     my_parse = my_parser.parse(""...input string...")
 
     print(my_parse)  # prints the ptree result or an error message
-
+```
 Common usage:
 
+``` py
     import pPEG
 
     my_parser = pPEG.compile(""... my grammar rules...""")
@@ -64,13 +66,14 @@ Common usage:
 
     # -- use my-parser in my application .......
 
-    my_parse = my_parser('...input string...}')
+    my_parse = my_parser.parse('...input string...}')
 
     if not my_parse.ok:
         print(my_parse.err)
         .... handle parse failure ... 
     else:    
         process(my_parse.ptree)
+```
 
 The `ptree` parse tree type is JSON data, as defined in [pPEG].
 
