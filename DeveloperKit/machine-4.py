@@ -1,7 +1,7 @@
 """
   Step 4: 
     pPEG boot grammar, 
-    full 8-instruction parser machine,
+    8-instruction parser machine,
     trace rule calls line report
     generates bootstrap ptree for step 5
 """
@@ -116,7 +116,7 @@ def seq(exp, env):
             env.pos = start 
             return False
     return True
-    
+
 def alt(exp, env):
     start = env.pos
     stack = len(env.tree)

@@ -28,13 +28,13 @@ Each step has a code file that can be run as a Python script
 ####  Step 4:     [Machine-4]
 
     Parser for pPEG boot grammar
-    full 8-instruction parser machine,
+    8-instruction parser machine,
     170 LOC parser machine
 
 ####  Step 5:     [Machine-5]
 
     Parser for full pPEG grammar, 
-    full 8-instruction parser machine,
+    8-instruction parser machine,
     parser_code from pPEG ptree,
     export grammar compile API
     200 LOC parser machine        
@@ -42,7 +42,7 @@ Each step has a code file that can be run as a Python script
 ####  Step 6:     [Machine-6]
 
     Parser for full pPEG grammar, 
-    full 8-instruction parser machine,
+    8-instruction parser machine,
     parser_code from pPEG ptree,
     export grammar compile API
     250 LOC parser machine        
@@ -50,7 +50,7 @@ Each step has a code file that can be run as a Python script
 ####  Step 7:     [Machine-7]
 
     Parser for full pPEG grammar, 
-    full 8-instruction parser machine,
+    8-instruction parser machine,
     parser_code from pPEG ptree,
     export grammar compile API
     250 LOC parser machine        

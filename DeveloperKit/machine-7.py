@@ -336,10 +336,6 @@ def _compile(ptree): # ptree -> code
     def emit_pre(exp):
         [_pre, [[_pfx, sign], term]] = exp
         expr = optimize(term)
-        # if sign == "~" :
-        #     print("~",expr)
-        #     if term[0] == "chs":
-        #         return [op["chs_"], term[1], True, 1, 1]
         return [op[_pre], [[_pfx, sign], expr]]
 
     def emit_leaf(exp):
@@ -460,12 +456,13 @@ Using op[exp[0]](exp):
 TODO extra features in pPEG
     - numeric repeat range
     - case insensitive string matching
-    - grammar raw string escape codes
+    - extension instruction...
+
 
 TODO:
     - err reporting
     - compute a first-char guard for the alt instruction
-
+    - grammar raw string escape codes??
 
 """
 
