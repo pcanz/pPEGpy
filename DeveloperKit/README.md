@@ -62,15 +62,16 @@ Each step has a code file that can be run as a Python script
     250 LOC parser machine
     100 LOC compiler
     100 LOC fault and trace reporting
-    500 LOC total
+    120 LOC extensions
+    700 LOC total
 
 [pPEG-machine]: https://github.com/pcanz/pPEG/blob/master/docs/pPEG-machine.md
 
-[Machine-1]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-1.js
-[Machine-2]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-2.js
-[Machine-3]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-3.js
-[Machine-4]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-4.js
-[Machine-5]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-5.js
-[Machine-6]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-6.js
-[Machine-7]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-7.js
-[Machine-8]: https://github.com/pcanz/pPEGpy/blob/master/pPEG.mjs
+[Machine-1]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-1.py
+[Machine-2]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-2.py
+[Machine-3]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-3.py
+[Machine-4]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-4.py
+[Machine-5]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-5.py
+[Machine-6]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-6.py
+[Machine-7]: https://github.com/pcanz/pPEGpy/blob/master/DeveloperKit/machine-7.py
+[Machine-8]: https://github.com/pcanz/pPEGpy/blob/master/pPEG.py
