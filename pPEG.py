@@ -83,7 +83,6 @@ class Env(): # parser machine environment...
 
         self.extn_indent = [] # TODO clean-up somehow
 
-
 def _parse(code, input, extend={}, trace=False):
     env = Env(code, input, extend, trace)
     result = id(code["$start"], env)
@@ -224,9 +223,14 @@ def dq(exp, env):
     for c in exp[1][1:-1]:
         if c == " ":
             if space:
-                if not space[0](space, env): return False
+                space[0](space, env)
             else:
-                while env.pos < env.end and env.input[env.pos] <= " ": env.pos += 1
+                while env.pos < env.end:
+                    c = env.input[env.pos]
+                    if c == ' ' or c == '\t' or c == '\n' or c == '\r':
+                        env.pos += 1
+                    else:
+                        break
             continue
         if env.pos >= env.end or c != env.input[env.pos]: return False
         env.pos += 1
@@ -450,7 +454,6 @@ def ext_undent(exp, env):
     env.extn_indent.pop()
     return True
 
-
 builtin = {
     "?": ext_trace,
     "@": same_match,
@@ -458,8 +461,6 @@ builtin = {
     "quote": quote, "quoter": quoter,
     "indent": ext_indent, "inset": ext_inset, "undent": ext_undent,
 }
-
-
 
 # -- utils ------------------------------------------------
 

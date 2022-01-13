@@ -2,7 +2,7 @@
 
 This is an implementation of [pPEG] in Python.
 
-pPEG.py is a single file Python module with no dependencies.
+pPEG.py is a Python module with no dependencies.
 
 ##  Example
 
