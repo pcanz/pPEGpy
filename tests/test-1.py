@@ -1,4 +1,12 @@
-import pPEG  # > export PYTHONPATH=..../pPEGpy/
+# import pPEG  #  needs an env var > export PYTHONPATH=..../pPEGpy/
+
+# from pPEGpy import pPEG  # needs a pip package
+
+import sys  # use this hack to import the pPEG.py file module...
+
+sys.path.insert(1, ".")  # import from current working directory
+import pPEG
+
 
 # -- example shown in main pPEG README.md -------------------------
 
@@ -40,14 +48,16 @@ pURI = pPEG.compile("""
     frag    = ~[ \t\n\r]*
 """)
 
-if not pURI.ok: print(pURI) # raise Exception("URI grammar error: "+pURI.err)
+if not pURI.ok:
+    print(pURI)  # raise Exception("URI grammar error: "+pURI.err)
 
-test = "http://www.ics.uci.edu/pub/ietf/uri/#Related";
-
+test = "http://www.ics.uci.edu/pub/ietf/uri/#Related"
 uri = pURI.parse(test)
 
-if uri.ok: print(uri.ptree)
-else: print(uri.err)
+if uri.ok:
+    print(uri.ptree)
+else:
+    print(uri.err)
 
 """
 ["URI",[["scheme","http"],["auth","www.ics.uci.edu"],["path","/pub/ietf/uri/"],["frag","Related"]]]
@@ -67,12 +77,12 @@ date = pPEG.compile("""
 """)
 
 
-print( date.parse("2012-04-05") ) # ok
-print( date.parse("2012-4-5") ) # ok
+print(date.parse("2012-04-05"))  # ok
+print(date.parse("2012-4-5"))  # ok
 
-print( date.parse("201234-04-056") ) # *4 year '-' fails 
+print(date.parse("201234-04-056"))  # *4 year '-' fails
 
-print( date.parse("2012-0456-056") ) # month *1.. ok, day fails
+print(date.parse("2012-0456-056"))  # month *1.. ok, day fails
 
 print("....")
 
@@ -82,7 +92,7 @@ icase = pPEG.compile("""
     s = "AbC"i
 """)
 
-print( icase.parse("aBC") )
+print(icase.parse("aBC"))
 
 print("....")
 
@@ -92,6 +102,6 @@ icase = pPEG.compile(r"""
     s = "a\tb\nc\td"
 """)
 
-print( icase.parse("""a\tb\nc\td""") )
+print(icase.parse("""a\tb\nc\td"""))
 
 print("....")
