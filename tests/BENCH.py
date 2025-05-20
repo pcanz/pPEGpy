@@ -1,5 +1,6 @@
-    
-import pPEG  # > export PYTHONPATH=.../pPEGpy/
+from pPEGpy import peg
+
+# NOTE:  not yet updated for new version of pPEGpy
 
 pPEG_grammar = """
     Peg   = " " (rule " ")+
@@ -28,29 +29,35 @@ pPEG_grammar = """
     _space_ = ('#' ~[\n\r]* / [ \t\n\r]+)*
 """
 
+
 def pPEG_test():
-    peg = pPEG.compile(pPEG_grammar)
+    peg = peg.compile(pPEG_grammar)
+
 
 def date_test():
-    date = pPEG.compile("""
+    date = peg.compile("""
     date  = year '-' month '-' day
     year  = [0-9]+
     month = [0-9]+
     day   = [0-9]+
     """)
 
-quote = pPEG.compile("""
+
+quote = peg.compile("""
     q = '"' ~["]* '"'
 """)
 # print( quote.parse('"1234567890123456789012345678901234567890"') )
 
+
 def quote_test():
     p = quote.parse('"01234567890123456789012345678901234567890123456789"')
 
+
 import timeit
-tests =  [["pPEG_test()", 1000], ["date_test()", 10000], ["quote_test()", 100000]] 
+
+tests = [["pPEG_test()", 1000], ["date_test()", 10000], ["quote_test()", 100000]]
 for t in tests:
-    print(t[0]+" x"+str(t[1]))
+    print(t[0] + " x" + str(t[1]))
     print(timeit.timeit(t[0], number=t[1], globals=locals()))
 
 """

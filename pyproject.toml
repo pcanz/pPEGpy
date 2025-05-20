@@ -1,0 +1,14 @@
+[project]
+name = "pPEGpy"
+version = "0.3.2"
+description = "pPEG -- portable PEG in Python"
+readme = "README.md"
+authors = [
+    { name = "Peter Cashin", email = "cashin.peter@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

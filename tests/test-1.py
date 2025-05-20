@@ -1,19 +1,13 @@
-# import pPEG  #  needs an env var > export PYTHONPATH=..../pPEGpy/
-
-# from pPEGpy import pPEG  # needs a pip package
-
-import sys  # use this hack to import the pPEG.py file module...
-
-sys.path.insert(1, ".")  # import from current working directory
-import pPEG
-
+from pPEGpy import peg
 
 # -- example shown in main pPEG README.md -------------------------
 
-sexp = pPEG.compile("""
-    list  = " ( " elem* " ) "
-    elem  = list / atom " "
-    atom  = ~[() \t\n\r]+
+sexp = peg.compile("""
+    sexp  = _ list _
+    list  = '(' _ elem* ')' _
+    elem  = list / atom
+    atom  = ~[() \t\n\r]+ _
+    _     = [ \t\n\r]*
 """)
 
 test = """
@@ -23,6 +17,20 @@ test = """
 p = sexp.parse(test)
 
 print(p)
+
+"""
+list
+│ atom 'foo '
+│ atom 'bar '
+│ list
+│ │ atom 'blat '
+│ │ atom '42'
+│ list
+│ │ atom 'f'
+│ │ list
+│ │ │ atom 'g'
+│ │ │ atom 'x'
+"""
 
 """
 ["list",[["atom","foo"],["atom","bar"],
@@ -39,7 +47,7 @@ print("....")
 
 # Equivalent to the regular expression for well-formed URI's in RFC 3986.
 
-pURI = pPEG.compile("""
+pURI = peg.compile("""
     URI     = (scheme ':')? ('//' auth)? path ('?' query)? ('#' frag)?
     scheme  = ~[:/?#]+
     auth    = ~[/?#]*
@@ -48,16 +56,18 @@ pURI = pPEG.compile("""
     frag    = ~[ \t\n\r]*
 """)
 
-if not pURI.ok:
-    print(pURI)  # raise Exception("URI grammar error: "+pURI.err)
-
 test = "http://www.ics.uci.edu/pub/ietf/uri/#Related"
 uri = pURI.parse(test)
 
-if uri.ok:
-    print(uri.ptree)
-else:
-    print(uri.err)
+print(uri)
+
+"""
+URI
+│ scheme 'http'
+│ auth 'www.ics.uci.edu'
+│ path '/pub/ietf/uri/'
+│ frag 'Related'
+"""
 
 """
 ["URI",[["scheme","http"],["auth","www.ics.uci.edu"],["path","/pub/ietf/uri/"],["frag","Related"]]]
@@ -67,7 +77,7 @@ else:
 
 print("....")
 
-date = pPEG.compile("""
+date = peg.compile("""
 # check comments are working...
     date  = year '-' month '-' day
     year  = [0-9]*4
@@ -88,20 +98,64 @@ print("....")
 
 # -- try case insensitve strings -------------------------------------
 
-icase = pPEG.compile("""
-    s = "AbC"i
+icase = peg.compile("""
+    s = 'AbC'i
 """)
 
 print(icase.parse("aBC"))
 
 print("....")
-
 # -- check string escapes (so that grammars can be raw strings) --------
 
-icase = pPEG.compile(r"""
-    s = "a\tb\nc\td"
+icase = peg.compile(r"""
+    s = 'a\tb\nc\td'
 """)
 
 print(icase.parse("""a\tb\nc\td"""))
 
 print("....")
+
+"""
+list
+│ atom 'foo '
+│ atom 'bar '
+│ list
+│ │ atom 'blat '
+│ │ atom '42'
+│ list
+│ │ atom 'f'
+│ │ list
+│ │ │ atom 'g'
+│ │ │ atom 'x'
+....
+URI
+│ scheme 'http'
+│ auth 'www.ics.uci.edu'
+│ path '/pub/ietf/uri/'
+│ frag 'Related'
+....
+date
+│ year '2012'
+│ month '04'
+│ day '05'
+date
+│ year '2012'
+│ month '4'
+│ day '5'
+*** parse failed at: 4 of: 13  ... for more details use: parse.dump() ...
+line 1 | 201234-04-056
+             ^ date failed
+date  = year '-' month '-' day
+
+*** parse failed at: 12 of: 13  ... for more details use: parse.dump() ...
+line 1 | 2012-0456-056
+                     ^ day failed
+day   = [0-9]*1..2
+    # last comment.
+
+....
+s 'aBC'
+....
+s 'a\tb\nc\td'
+....
+"""

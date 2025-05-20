@@ -2,6 +2,8 @@
 
 This directory contains Python code samples for the incremental development of a pPEG parser machine, as explained in [pPEG-machine].
 
+The parse tree and trace features need to be updated. A new parse tree based on arrays of integer index values replaces the original Python array structure. A standard ptree can be build from this new internal parse tree.  The new internal tree can include failed nodes and a dump of the parse tree after a failed parse shows what happened and this replaces the old trace feature described here. 
+
 Each step has a code file that can be run as a Python script
 
 ####  Step 1:   [Machine-1]

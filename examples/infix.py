@@ -1,8 +1,10 @@
-import pPEG
+from pPEGpy import peg
+
+# NOTE:  <infix> Pratt parse not yet implemented in new version of pPEGpy
 
 # operator expressions from GO lang.
 
-exp = pPEG.compile("""
+exp = peg.compile("""
     exp   = " " opx " "
     opx   = pre (op pre)* <infix>
     pre   = pfx? var
@@ -18,8 +20,10 @@ exp = pPEG.compile("""
     op_5L = [*/%&]/'<<'/'>>'/'&^'
 """)
 
+
 def show(eg):
     print(eg, "=>", exp.parse(eg), "\n")
+
 
 show("1+2*3")
 

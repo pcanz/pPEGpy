@@ -1,5 +1,7 @@
 import pPEG
 
+# NOTE: not yet updated to new version of pPEGpy
+
 # Context Sensitive Grammars
 
 # using <@name> to match a name rule result the same-again
@@ -22,7 +24,7 @@ raw = pPEG.compile("""
     fence = '#'+
 """)
 
-print(raw.parse('''##"abcc#"x"#def"##'''))
+print(raw.parse("""##"abcc#"x"#def"##"""))
 
 # indented blocks...
 
@@ -33,13 +35,15 @@ blocks = pPEG.compile("""
     line   = ~[\n\r]* '\r'? '\n'
 """)
 
-print(blocks.parse("""  line one
+print(
+    blocks.parse("""  line one
   line two
     inset 2.1
       inset 3.1
     inset 2.2
   line three
-"""))
+""")
+)
 
 
 # -- <quote> extension ----------

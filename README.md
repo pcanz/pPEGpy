@@ -2,16 +2,61 @@
 
 This is an implementation of [pPEG] in Python.
 
-pPEG.py is a Python module with no dependencies.
+The package pPEGpy was created with: uv init --lib
+
+from pPEGpy import peg 
+
+The peg.py file (in src/pPEGpy/) is a module with no dependencies.
 
 ##  Example
 
-``` py
-import pPEG
+``` python
+from pPEGpy import peg
+
+sexp = peg.compile("""
+    sexp  = _ list _
+    list  = '(' _ elem* ')' _
+    elem  = list / atom
+    atom  = ~[() \t\n\r]+ _
+    _     = [ \t\n\r]*
+""")
+
+test = """
+    (foo bar (blat 42) (f(g(x))))
+"""
+
+p = sexp.parse(test)
+
+print(p)
+```
+
+```
+list
+│ atom 'foo '
+│ atom 'bar '
+│ list
+│ │ atom 'blat '
+│ │ atom '42'
+│ list
+│ │ atom 'f'
+│ │ list
+│ │ │ atom 'g'
+│ │ │ atom 'x'
+```
+ptree:
+```
+["list",[["atom","foo"],["atom","bar"],
+    ["list",[["atom","blat"],["atom","42"]]],
+    ["list",[["atom","f"],
+        ["list",[["atom","g"],["atom","x"]]]]]]]
+```
+
+``` python
+from pPEGpy import peg
 
 # Equivalent to the regular expression for well-formed URI's in RFC 3986.
 
-pURI = pPEG.compile("""
+pURI = peg.compile("""
     URI     = (scheme ':')? ('//' auth)? path ('?' query)? ('#' frag)?
     scheme  = ~[:/?#]+
     auth    = ~[/?#]*
@@ -20,18 +65,21 @@ pURI = pPEG.compile("""
     frag    = ~[ \t\n\r]*
 """)
 
-if not pURI.ok: raise Exception("URI grammar error: "+pURI.err)
-
-test = "http://www.ics.uci.edu/pub/ietf/uri/#Related";
-
+test = "http://www.ics.uci.edu/pub/ietf/uri/#Related"
 uri = pURI.parse(test)
 
-if uri.ok: print(uri.ptree)
-else: print(uri.err)
-
-"""
+print(uri)
+```
+```
+URI
+│ scheme 'http'
+│ auth 'www.ics.uci.edu'
+│ path '/pub/ietf/uri/'
+│ frag 'Related'
+```
+ptree:
+```
 ["URI",[["scheme","http"],["auth","www.ics.uci.edu"],["path","/pub/ietf/uri/"],["frag","Related"]]]
-"""
 ```
 
 ##  Usage
@@ -45,24 +93,22 @@ Not yet available for `pip` install.
 Basic usage:
 
 ``` py    
-    import pPEG
+    from pPEGpy import peg
 
-    my_parser = pPEG.compile(""... my grammar rules...""")
+    my_parser = peg.compile(""... my_grammar rules...""")
 
     # For the grammar rules see the [pPEG] documentation, then:
 
-    my_parse = my_parser.parse(""...input string...")
+    parse = my_parser.parse(""...input string...")
 
-    print(my_parse)  # prints the ptree result or an error message
+    print(parse)  # prints the ptree result or an error message
 ```
 Common usage:
 
 ``` py
-    import pPEG
+    from pPEGpy import peg
 
-    my_parser = pPEG.compile(""... my grammar rules...""")
-
-    if not my_parser.ok: raise Exception(my_parser.err)
+    my_parser = peg.compile(""... my grammar rules...""")
 
     # -- use my-parser in my application .......
 
@@ -77,6 +123,57 @@ Common usage:
 
 The `ptree` parse tree type is JSON data, as defined in [pPEG].
 
+## Package Notes
 
+in pPEGpy:  
+
+> uv init --lib
+
+> uv build
+
+> pip install -e .
+
+The -e option allows local editing of the peg.py file.
+
+The uv init --lib made the project name lower case ppegpy, I edited the name back to pPEGpy in several places (.toml, src/pPEGpy/)
+
+For some unknown reason uv init --lib did not create the .venv or .vscode directories that I expected (it did build these when I tried it out earlier).  Is this because this directory was a github clone from my gitub repo??
+
+
+### Bare File
+
+The peg.py file in: pPEGpy/src/pPEGy/peg.py is the only file you really need.
+
+If you put a copy of this file into the directory with your programs you can import the file directly.  Very simple and easy.  But that does not work across directories, to import the bare peg.py file from another directory requires a hack like this:
+
+import sys
+
+sys.path.insert(1, ".")  # import from current working directory
+import pPEG
+
+To simplify that (at the cost of all the Python packaging complications!) you can build a pacakage pPEGpy and install it as with pip, as above.
+
+When pPEGpy is published on PyPi it can be installed with pip in the usual way.
+
+
+### Development Tools?
+
+Pylance could not resolve import from pPEGy  ??? 
+
+Yet the files ran with > python3 date.py
+
+Reading the doumentation leaad to this:
+
+> python -m pip install {package_name}
+
+~/D/p/pPEGpy[127]►python3 -m pip install pPEGpy         (master|💩?) 12:02
+Defaulting to user installation because normal site-packages is not writeable
+Requirement already satisfied: pPEGpy in /Users/petercashin/Library/Python/3.12/lib/python/site-packages (0.3.2)
+
+[notice] A new release of pip is available: 24.2 -> 25.1.1
+[notice] To update, run: pip install --upgrade pip
+
+
+---
 
 [pPEG]: https://github.com/pcanz/pPEG
