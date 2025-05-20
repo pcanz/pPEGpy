@@ -2,11 +2,11 @@
 
 This is an implementation of [pPEG] in Python.
 
-The package pPEGpy was created with: uv init --lib
+The package pPEGpy was created with: `uv init --lib`
 
-from pPEGpy import peg 
+`from pPEGpy import peg` 
 
-The peg.py file (in src/pPEGpy/) is a module with no dependencies.
+The `peg.py file` (in `src/pPEGpy/`) is a module with no dependencies.
 
 ##  Example
 
@@ -83,10 +83,6 @@ ptree:
 ```
 
 ##  Usage
-
-The pPEG.py implementation is a single file with no dependencies.
-
-Put a copy of the pPEG.py file into the same directory as your application, or use a PYTHONPATH shell environment variable for Python to load the pPEG.py module.
 
 Not yet available for `pip` install.
 
