@@ -1,12 +1,16 @@
 # pPEGpy
 
-This is an implementation of [pPEG] in Python.
+This is an implementation of a portable PEG parser in Python.
 
-The package pPEGpy was created with: `uv init --lib`
+For documentation see [pPEG], the portable PEG project.
 
-`from pPEGpy import peg` 
+The `pPEGpy` package can be installed from PyPi with:
+```
+> pip install pPEGpy
+```
+Note the spelling of `pPEGpy`, there are unrelated packages with similar names. 
 
-The `peg.py file` (in `src/pPEGpy/`) is a module with no dependencies.
+For other ways to use the `pPEGpy` grammar-parser see the Package Notes below.
 
 ##  Example
 
@@ -14,10 +18,10 @@ The `peg.py file` (in `src/pPEGpy/`) is a module with no dependencies.
 from pPEGpy import peg
 
 sexp = peg.compile("""
-    sexp  = _ list _
+    sexp  = _ list
     list  = '(' _ elem* ')' _
-    elem  = list / atom
-    atom  = ~[() \t\n\r]+ _
+    elem  = list / atom _
+    atom  = ~[() \t\n\r]+
     _     = [ \t\n\r]*
 """)
 
@@ -29,13 +33,13 @@ p = sexp.parse(test)
 
 print(p)
 ```
-
+This prints a parse tree diagram:
 ```
 list
-│ atom 'foo '
-│ atom 'bar '
+│ atom 'foo'
+│ atom 'bar'
 │ list
-│ │ atom 'blat '
+│ │ atom 'blat'
 │ │ atom '42'
 │ list
 │ │ atom 'f'
@@ -43,13 +47,18 @@ list
 │ │ │ atom 'g'
 │ │ │ atom 'x'
 ```
-ptree:
+Application can use a `ptree`:
 ```
+ptree = p.tree()
+
+print(ptree)  # =>
+
 ["list",[["atom","foo"],["atom","bar"],
     ["list",[["atom","blat"],["atom","42"]]],
     ["list",[["atom","f"],
         ["list",[["atom","g"],["atom","x"]]]]]]]
 ```
+Another example:
 
 ``` python
 from pPEGpy import peg
@@ -79,32 +88,18 @@ URI
 ```
 ptree:
 ```
-["URI",[["scheme","http"],["auth","www.ics.uci.edu"],["path","/pub/ietf/uri/"],["frag","Related"]]]
+["URI",[["scheme","http"],["auth","www.ics.uci.edu"],
+        ["path","/pub/ietf/uri/"],["frag","Related"]]]
 ```
 
 ##  Usage
 
-Not yet available for `pip` install.
-
-Basic usage:
-
-``` py    
-    from pPEGpy import peg
-
-    my_parser = peg.compile(""... my_grammar rules...""")
-
-    # For the grammar rules see the [pPEG] documentation, then:
-
-    parse = my_parser.parse(""...input string...")
-
-    print(parse)  # prints the ptree result or an error message
-```
 Common usage:
 
 ``` py
     from pPEGpy import peg
 
-    my_parser = peg.compile(""... my grammar rules...""")
+    my_parser = peg.compile(""... my pPEG grammar rules...""")
 
     # -- use my-parser in my application .......
 
@@ -114,62 +109,44 @@ Common usage:
         print(my_parse.err)
         .... handle parse failure ... 
     else:    
-        process(my_parse.ptree)
+        ptree = my_parse.tree()
+        process(ptree)
 ```
-
 The `ptree` parse tree type is JSON data, as defined in [pPEG].
 
 ## Package Notes
 
-in pPEGpy:  
+To experiment you can clone the GitHub repository [pPEGpy].
 
+These command lines can be used to build a local package:
+```
+> cd <your pPEGpy directory>
 > uv init --lib
-
 > uv build
-
 > pip install -e .
+```
+The -e option allows local editing of the local files.
 
-The -e option allows local editing of the peg.py file.
-
-The uv init --lib made the project name lower case ppegpy, I edited the name back to pPEGpy in several places (.toml, src/pPEGpy/)
-
-For some unknown reason uv init --lib did not create the .venv or .vscode directories that I expected (it did build these when I tried it out earlier).  Is this because this directory was a github clone from my gitub repo??
-
+The repo includes an `examples/` folder, try running the `date.py` for example. 
 
 ### Bare File
 
-The peg.py file in: pPEGpy/src/pPEGy/peg.py is the only file you really need.
+The `peg.py` file in: `pPEGpy/src/pPEGy/peg.py` is the only file you really need.
 
-If you put a copy of this file into the directory with your programs you can import the file directly.  Very simple and easy.  But that does not work across directories, to import the bare peg.py file from another directory requires a hack like this:
+If you put a copy of this file into a folder together with your own programs you can import the grammar-parser directly with `import peg`.  Very simple and easy.
 
+But that does not work across directories, to import the bare `peg.py` file from another directory requires a hack like this:
+```
 import sys
-
-sys.path.insert(1, ".")  # import from current working directory
-import pPEG
-
-To simplify that (at the cost of all the Python packaging complications!) you can build a pacakage pPEGpy and install it as with pip, as above.
-
-When pPEGpy is published on PyPi it can be installed with pip in the usual way.
-
-
-### Development Tools?
-
-Pylance could not resolve import from pPEGy  ??? 
-
-Yet the files ran with > python3 date.py
-
-Reading the doumentation leaad to this:
-
-> python -m pip install {package_name}
-
-~/D/p/pPEGpy[127]►python3 -m pip install pPEGpy         (master|💩?) 12:02
-Defaulting to user installation because normal site-packages is not writeable
-Requirement already satisfied: pPEGpy in /Users/petercashin/Library/Python/3.12/lib/python/site-packages (0.3.2)
-
-[notice] A new release of pip is available: 24.2 -> 25.1.1
-[notice] To update, run: pip install --upgrade pip
+sys.path.insert(1, <path to your copy of peg.py>)
+import peg
+```
+To avoid that (at the cost of all the Python packaging complications!) you can build a package `pPEGpy` and install it with pip, as above.
 
 
 ---
 
 [pPEG]: https://github.com/pcanz/pPEG
+
+[pPEGpy]: https://github.com/pcanz/pPEGpy/tree/master 
+
