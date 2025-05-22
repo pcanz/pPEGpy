@@ -65,6 +65,11 @@ class Parse:
         else:
             return err_report(self)
 
+    # -- parse tree methods ---------------------------
+
+    def id(self, i):
+        return self.idents[i] >> 4
+
     def name(self, i):  # parse tree node name
         ident = self.idents[i]  # [id:0xFFF|type:0xF]
         return self.code.names[ident >> 4]
@@ -149,8 +154,8 @@ def run(parse: Parse, expr: list):
             index = len(parse.starts)
             parse.starts.append(pos)
             parse.idents.append((idx << 4) | defx)
-            parse.ends.append(0)  # assign at index after run
-            parse.sizes.append(0)  # assign at index after run
+            parse.ends.append(0)  # assign end pos after run
+            parse.sizes.append(depth)  # assign size after run
 
             # -- run -----------------------
             rule = parse.code.codes[idx]
@@ -276,15 +281,16 @@ def run(parse: Parse, expr: list):
             return True
 
         case ["extn", chars]:  # TODO compile into function call
-            args = chars[1:-1].split()
-            extra = parse.code.extras.get(args[0], None)
-            if extra:
-                return extra(parse, args)
-            print(f"extn args: {args}")
+            # args = chars[1:-1].split()
+            # extra = parse.code.extras.get(args[0], None)
+            # if extra:
+            #     return extra(parse, args)
+            # print(f"extn args: {args}")
+            print(f"undefined extn {chars} ...")
             return False
 
-        case ["ext", fn]:
-            return fn(parse)
+        case ["ext", fn, args]:
+            return fn(parse, args)
 
         case _:
             raise Exception("*** crash: run: undefined expression...")
@@ -501,7 +507,7 @@ def src_map(parse, name, note=""):
             continue
         if peg_parse.text(i + 1) != name:
             continue
-        lines.append(f"{peg_parse.text(i)}")
+        lines.append(f"{peg_parse.text(i)!r}")
     return "\n".join(lines)
 
 
@@ -552,6 +558,12 @@ class Code:
     def errors(self):
         return "\n".join(self.err)
 
+    def name_id(self, name):  # TODO handle ValueError
+        return self.names.index(name)
+
+    def id_name(self, id):  # TODO handle IndexError
+        return self.names[id]
+
 
 # -- rule types ------------------------------------------------------------------
 
@@ -597,17 +609,22 @@ def code_rule_defs(code, name, defn, expr):
     code.defs.append(defx)
 
 
+def name_id(code, name):
+    try:
+        idx = code.names.index(name)
+        return idx
+    except ValueError:
+        code.err.append(f"undefined rule: {name}")
+        code_rule_defs(code, name, "=", ["extn", "<undefined>"])
+        code.codes.append(["extn", "<undefined>"])
+        return len(code.names) - 1
+
+
 def emit(code, expr):
     match expr:
         case ["id", name]:
-            try:
-                idx = code.names.index(name)
-            except ValueError:
-                code.err.append(f"undefined rule: {name}")
-                code_rule_defs(code, name, "=", ["extn", "<undefined>"])
-                code.codes.append(["extn", "<undefined>"])
-                return ["id", len(code.names) - 1]
-            return ["id", idx]
+            id = name_id(code, name)
+            return ["id", id]
         case ["alt", nodes]:
             return ["alt", [emit(code, x) for x in nodes]]
         case ["seq", nodes]:
@@ -639,8 +656,8 @@ def emit(code, expr):
             return ["class", escape(str, code)]
         case ["dot", _]:
             return ["dot"]
-        case ["extn", _]:
-            return expr
+        case ["extn", extend]:
+            return extra_fn(code, extend)
         case _:
             raise Exception(f"*** crash: emit: undefined expression: {expr}")
 
@@ -764,3 +781,51 @@ def compile(grammar, extras=None) -> Code:
 
 
 peg_code = compile(peg_grammar)  # to improve grammar error reporting
+
+
+# == extension functions ==============================================
+
+
+def dump_fn(parse):  # <dump>
+    parse.dump()
+    return True
+
+
+def at_fn(parse, id):  # <@name>
+    pos = parse.pos
+    n = len(parse.starts) - 1
+    d = parse.depth(n)
+    hits = 0
+    while n >= 0:
+        if parse.id(n) == id:
+            hits += 1
+            w = parse.depth(n)
+            if w < d:
+                return False
+            if w != d:
+                n -= 1
+                continue
+            start = parse.starts[n]
+            end = parse.ends[n]
+            if pos + end - start > parse.end:
+                return False
+            for i in range(start, end):
+                if parse.input[i] != parse.input[pos]:
+                    return False
+                pos += 1
+            parse.pos = pos
+            return True
+        n -= 1
+    return hits == 0  # no prior to be matched
+
+
+# -- compile extension --------------------------------------
+
+
+def extra_fn(code, extend):
+    if extend == "<dump>":
+        return ["ext", dump_fn, ""]
+    if extend[1] == "@":
+        id = name_id(code, extend[2:-1])
+        return ["ext", at_fn, id]
+    return ["extn", extend]

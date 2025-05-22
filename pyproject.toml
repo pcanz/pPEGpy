@@ -1,12 +1,12 @@
 [project]
 name = "pPEGpy"
-version = "0.3.2"
+version = "0.3.4"
 description = "pPEG -- portable PEG in Python"
 readme = "README.md"
 authors = [
     { name = "Peter Cashin", email = "cashin.peter@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = []
 
 [build-system]
