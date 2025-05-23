@@ -1,4 +1,5 @@
-from pPEGpy import peg
+# from pPEGpy import peg
+import pPEGpy as peg
 
 print("First a simple date grammar -------------------------------------\n")
 print("-  rules only uses sequence, or choice, with quoted literal match")

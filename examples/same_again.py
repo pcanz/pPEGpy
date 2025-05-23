@@ -1,8 +1,19 @@
-from pPEGpy import peg
+import pPEGpy as peg
 
 # Context Sensitive Grammars
 
 # using <@name> to match a name rule result the same-again
+
+# basic test...
+
+code = peg.compile("""
+    s = x ':' <@x> ':' atx etc
+    x = [a-z]*
+    atx = <@x>
+    etc = .*
+""")
+
+print(code.parse("abc:abc:abcdef"))
 
 # Markdown code quotes...
 

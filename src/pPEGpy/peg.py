@@ -1,4 +1,7 @@
-# pPEGpy -- run with Python 3.10+   2025-05-18
+# pPEGpy -- run with Python 3.10+   2025-05-22
+
+# pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
+# pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -156,6 +159,13 @@ def run(parse: Parse, expr: list):
             parse.idents.append((idx << 4) | defx)
             parse.ends.append(0)  # assign end pos after run
             parse.sizes.append(depth)  # assign size after run
+
+            # check for roll back ---------------------
+
+            i = index - 1  # previous node
+            while i >= 0 and parse.ends[i] > pos:
+                parse.idents[i] |= FAIL  # fail flag
+                i -= 1
 
             # -- run -----------------------
             rule = parse.code.codes[idx]
