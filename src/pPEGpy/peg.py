@@ -91,6 +91,9 @@ class Parse:
     def leaf(self, i):  # is a terminal node?
         return self.idents[i] & 0xF == TERM
 
+    def fail(self, i):  # failed node?
+        return (self.idents[i] & FAIL) != 0
+
     def tree(self):
         ptree = p_tree(self, 0, len(self.ends))
         if not ptree:
@@ -133,7 +136,7 @@ def parser(code: Code, input: str) -> Parse:
 # -- the run engine that does all the work ----------------------------
 
 
-def run(parse: Parse, expr: list):
+def run(parse: Parse, expr: list) -> bool:
     match expr:
         case ["id", idx]:
             # execute anon ids....
@@ -154,7 +157,7 @@ def run(parse: Parse, expr: list):
                 raise SystemExit(f"*** run away recursion, in: {parse.code.names[idx]}")
 
             # parse tree array - enter node ------------
-            index = len(parse.starts)
+            index = len(parse.starts)  # this node
             parse.starts.append(pos)
             parse.idents.append((idx << 4) | defx)
             parse.ends.append(0)  # assign end pos after run
@@ -296,8 +299,7 @@ def run(parse: Parse, expr: list):
             # if extra:
             #     return extra(parse, args)
             # print(f"extn args: {args}")
-            print(f"undefined extn {chars} ...")
-            return False
+            raise NameError(f"*** Undefined extension: {chars} ...")
 
         case ["ext", fn, args]:
             return fn(parse, args)
@@ -796,7 +798,7 @@ peg_code = compile(peg_grammar)  # to improve grammar error reporting
 # == extension functions ==============================================
 
 
-def dump_fn(parse):  # <dump>
+def dump_fn(parse, _):  # <dump>
     parse.dump()
     return True
 
@@ -804,15 +806,17 @@ def dump_fn(parse):  # <dump>
 def at_fn(parse, id):  # <@name>
     pos = parse.pos
     n = len(parse.starts) - 1
-    d = parse.depth(n)
+    d = parse.deep  # depth(n)
     hits = 0
     while n >= 0:
+        k = parse.depth(n)
+        # <@name> may be in it's own rule, if so adjust it's depth....
+        if hits == 0 and k < d:
+            d -= 1
+            continue
         if parse.id(n) == id:
             hits += 1
-            w = parse.depth(n)
-            if w < d:
-                return False
-            if w != d:
+            if k > d or parse.fail(n) or parse.ends[n] > pos:
                 n -= 1
                 continue
             start = parse.starts[n]

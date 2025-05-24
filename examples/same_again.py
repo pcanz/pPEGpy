@@ -7,13 +7,24 @@ import pPEGpy as peg
 # basic test...
 
 code = peg.compile("""
-    s = x ':' <@x> ':' atx etc
+    s = x ':' <@x>
     x = [a-z]*
-    atx = <@x>
-    etc = .*
 """)
 
-print(code.parse("abc:abc:abcdef"))
+print(code.parse("abc:abc"))
+
+# middle test...
+
+code = peg.compile("""
+    p  = x m x_
+    x  = [a-z]
+    x_ = <@x>
+    m  = (x &x)*
+""")
+
+p = code.parse("abba")
+# p.dump()
+print(p)
 
 # Markdown code quotes...
 
@@ -23,7 +34,9 @@ code = peg.compile("""
     tics = [`]+
 """)
 
-print(code.parse("```abcc``def```"))
+p = code.parse("```abc``def```")
+# p.dump(0)
+print(p)
 
 # Rust raw string syntax:
 
@@ -38,8 +51,8 @@ print(raw.parse("""##"abcc#"x"#def"##"""))
 # indented blocks...
 
 blocks = peg.compile("""
-    Blk    = inset line (more / inlay)*
-    more   = <@inset> !' ' line
+    Blk    = inset line (next / inlay)*
+    next   = <@inset> !' ' line
     inlay  = &(<@inset> ' ') Blk
     inset  = ' '+
     line   = ~[\n\r]* '\r'? '\n'?
