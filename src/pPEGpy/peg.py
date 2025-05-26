@@ -1,7 +1,9 @@
-# pPEGpy -- run with Python 3.10+   2025-05-22
+# pPEGpy -- run with Python 3.10+   2025-05-26
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
 # pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
+#  -- fix roll back, add test-peg  => PiPy 0.3.5
+#  -- improve dump to show !fail or -roll back  => PiPy 0.3.6
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -91,7 +93,7 @@ class Parse:
     def leaf(self, i):  # is a terminal node?
         return self.idents[i] & 0xF == TERM
 
-    def fail(self, i):  # failed node?
+    def fail(self, i):  # failed node?  FAIL = 0xC == fail 8 | roll back 4
         return (self.idents[i] & FAIL) != 0
 
     def tree(self):
@@ -163,11 +165,11 @@ def run(parse: Parse, expr: list) -> bool:
             parse.ends.append(0)  # assign end pos after run
             parse.sizes.append(depth)  # assign size after run
 
-            # check for roll back ---------------------
+            # # check for roll back ---------------------
 
             i = index - 1  # previous node
             while i >= 0 and parse.ends[i] > pos:
-                parse.idents[i] |= FAIL  # fail flag
+                parse.idents[i] |= 0x4  # roll back/fail flag
                 i -= 1
 
             # -- run -----------------------
@@ -183,7 +185,8 @@ def run(parse: Parse, expr: list) -> bool:
 
             # parse tree ---------------
             parse.ends[index] = parse.pos
-            size = len(parse.ends) - index
+            end = len(parse.ends)
+            size = end - index
             parse.sizes[index] = (size << 8) | depth
             if not ok:
                 parse.idents[index] |= FAIL  # fail flag
@@ -335,14 +338,14 @@ def prune(parse, step, i, j, k, depth):  #  -> (i, k)
             continue
         start = parse.starts[i]
         end = parse.ends[i]
-        if size == 1:
-            i1 = i + 1
+        if size == 1 or (step == 2 and (ident & 3) == TERM):
+            i1 = i + size
             k1 = k + 1
         else:
-            elide = (step == 2) and (ident & 7) == EQ
-            if elide and i + 1 < j and size - 1 == parse.size(i + 1):
-                i += 1
-                continue
+            if step == 2 and (ident & 3) == EQ:  # delete if redundant
+                if i + 1 < j and size - 1 == parse.size(i + 1):
+                    i += 1
+                    continue
             i1, k1 = prune(parse, step, i + 1, i + size, k + 1, depth + 1)
             size = k1 - k
         if size == 1 and (ident & 3) != HEAD:
@@ -416,7 +419,10 @@ def dump_tree(parse: Parse, filter=1) -> None:
         if fail:
             if filter == 1 and start == end:
                 continue
-            name = "!" + name
+            if ident & FAIL < 8:  # roll back
+                name = "-" + name
+            else:  # real failure
+                name = "!" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -495,11 +501,13 @@ def line_number(input, i):
 
 
 def rule_info(parse):
-    if parse.top > parse.first and parse.end_pos > -1:
+    first = parse.first  # > peak failure
+    top = parse.top  # >= root failure
+    if top > first and parse.end_pos > -1:
         return "unexpected ending"
-    target = parse.first
-    if parse.first < len(parse.ends) - 1 and parse.top < parse.first:
-        target = parse.top
+    target = first
+    if first < len(parse.ends) - 1 and top < first:
+        target = top
     name = parse.name(target)
     if parse.starts[target] == parse.ends[target]:
         note = " expected"
@@ -586,7 +594,7 @@ ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
-FAIL = 8  #      flag bit
+FAIL = 0xC  #      flag bits
 
 # -- compile Parse into Code parser instructions -----------------------------------
 
