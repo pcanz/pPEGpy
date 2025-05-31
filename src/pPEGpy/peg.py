@@ -1,9 +1,10 @@
-# pPEGpy -- run with Python 3.10+   2025-05-26
+# pPEGpy -- run with Python 3.10+   2025-05-22
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
 # pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
 #  -- fix roll back, add test-peg  => PiPy 0.3.5
 #  -- improve dump to show !fail or -roll back  => PiPy 0.3.6
+# pPEGpy-14.py -- change roll-back, use seq reset => PiPy 0.3.7
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -59,6 +60,7 @@ class Parse:
         self.max_depth = 255  # catch left recursion
 
         # faults...
+        self.index = 0  # parse tree length, for roll-back resets
         self.max_pos = -1  # peak fail
         self.first = -1  # node at max pos failure
         self.top = -1  # parent of first node
@@ -93,7 +95,7 @@ class Parse:
     def leaf(self, i):  # is a terminal node?
         return self.idents[i] & 0xF == TERM
 
-    def fail(self, i):  # failed node?  FAIL = 0xC == fail 8 | roll back 4
+    def fail(self, i):  # failed node?  FAIL = 0xC == fail 0x8 | roll back 0x4
         return (self.idents[i] & FAIL) != 0
 
     def tree(self):
@@ -159,18 +161,12 @@ def run(parse: Parse, expr: list) -> bool:
                 raise SystemExit(f"*** run away recursion, in: {parse.code.names[idx]}")
 
             # parse tree array - enter node ------------
-            index = len(parse.starts)  # this node
+            index = parse.index  # this node == len(parse.starts)
+            parse.index += 1
             parse.starts.append(pos)
             parse.idents.append((idx << 4) | defx)
             parse.ends.append(0)  # assign end pos after run
             parse.sizes.append(depth)  # assign size after run
-
-            # # check for roll back ---------------------
-
-            i = index - 1  # previous node
-            while i >= 0 and parse.ends[i] > pos:
-                parse.idents[i] |= 0x4  # roll back/fail flag
-                i -= 1
 
             # -- run -----------------------
             rule = parse.code.codes[idx]
@@ -189,7 +185,7 @@ def run(parse: Parse, expr: list) -> bool:
             size = end - index
             parse.sizes[index] = (size << 8) | depth
             if not ok:
-                parse.idents[index] |= FAIL  # fail flag
+                parse.idents[index] |= FELL
 
             parse.deep -= 1
             return ok
@@ -200,7 +196,7 @@ def run(parse: Parse, expr: list) -> bool:
             for x in list:
                 if run(parse, x):
                     if parse.pos > pos:  # treat empty match as failure
-                        return True
+                        return True  # TODO report a warning for this
                 if parse.pos > pos:
                     max = pos
                 parse.pos = pos  # reset (essential)
@@ -208,8 +204,13 @@ def run(parse: Parse, expr: list) -> bool:
             return False
 
         case ["seq", list]:
+            index = parse.index
             for i, x in enumerate(list):
                 if not run(parse, x):
+                    i = index  # parse tree roll-back
+                    while i < parse.index:
+                        parse.idents[i] |= FALL
+                        i += 1
                     return False
             return True
 
@@ -240,9 +241,14 @@ def run(parse: Parse, expr: list) -> bool:
             return True
 
         case ["pred", op, term]:  # !x &x
+            index = parse.index
             pos = parse.pos
             result = run(parse, term)
             parse.pos = pos  # reset
+            i = index  # parse tree roll-back
+            while i < parse.index:
+                parse.idents[i] |= FALL
+                i += 1
             if op == "!":
                 return not result
             return result
@@ -250,9 +256,14 @@ def run(parse: Parse, expr: list) -> bool:
         case ["neg", term]:  # ~x
             if parse.pos >= parse.end:
                 return False
+            index = parse.index
             pos = parse.pos
             result = run(parse, term)
             parse.pos = pos  # reset
+            i = index  # parse tree roll-back
+            while i < parse.index:
+                parse.idents[i] |= FALL
+                i += 1
             if result:
                 return False
             parse.pos += 1
@@ -296,16 +307,8 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos += 1
             return True
 
-        case ["extn", chars]:  # TODO compile into function call
-            # args = chars[1:-1].split()
-            # extra = parse.code.extras.get(args[0], None)
-            # if extra:
-            #     return extra(parse, args)
-            # print(f"extn args: {args}")
-            raise NameError(f"*** Undefined extension: {chars} ...")
-
-        case ["ext", fn, args]:
-            return fn(parse, args)
+        case ["ext", fn, args]:  # compiled from <an extension>
+            return fn(parse, args)  # TODO reset roll-back on failure
 
         case _:
             raise Exception("*** crash: run: undefined expression...")
@@ -331,7 +334,7 @@ def prune_tree(parse):
 def prune(parse, step, i, j, k, depth):  #  -> (i, k)
     while i < j:  # read: i..j  ==>  write: k..
         ident = parse.idents[i]
-        fail = (ident & 8) != 0
+        fail = (ident & FAIL) != 0
         size = parse.size(i)
         if fail:  # step == 1
             i += size
@@ -419,9 +422,9 @@ def dump_tree(parse: Parse, filter=1) -> None:
         if fail:
             if filter == 1 and start == end:
                 continue
-            if ident & FAIL < 8:  # roll back
+            if ident & FALL != 0:  # roll back
                 name = "-" + name
-            else:  # real failure
+            else:  # FELL real failure
                 name = "!" + name
         anon = ""
         if pos < start:
@@ -594,7 +597,9 @@ ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
-FAIL = 0xC  #      flag bits
+FAIL = 0xC  #      failure flag bits: FELL | FALL
+FELL = 0x8  #      simple failure: !rule
+FALL = 0x4  #      roll-back failure: -rule
 
 # -- compile Parse into Code parser instructions -----------------------------------
 
@@ -619,7 +624,7 @@ def code_rule_defs(code, name, defn, expr):
     try:
         defx = DEFS.index(defn)
     except ValueError:
-        defx = FAIL
+        defx = FELL
         code.err.append(f"undefined: {name} {defn} ...")
     if defx == EQ:
         if name[0] == "_":
@@ -755,7 +760,7 @@ def apply(name, fn, args):
     try:
         result = fn(args)
     except Exception as err:
-        raise SystemExit(f"{name}({args})\n{err}")
+        raise SystemExit(f"*** transform failed: {name}({args})\n{err}")
     return result
 
 
@@ -847,7 +852,12 @@ def at_fn(parse, id):  # <@name>
 def extra_fn(code, extend):
     if extend == "<dump>":
         return ["ext", dump_fn, ""]
-    if extend[1] == "@":
+    if extend[1] == "@":  # <@rule>
         id = name_id(code, extend[2:-1])
         return ["ext", at_fn, id]
-    return ["extn", extend]
+    # <command args...>
+    # args = extend[1:-1].split()
+    # extra = code.extras.get(args[0], None)
+    # if extra:  # TODO compile extra -> ['ext', fn, args]
+    #     return ["ext", extra, id, args]
+    raise NameError(f"*** Undefined extension: {extend} ...")
