@@ -641,7 +641,6 @@ def name_id(code, name):
     except ValueError:
         code.err.append(f"undefined rule: {name}")
         code_rule_defs(code, name, "=", ["extn", "<undefined>"])
-        code.codes.append(["extn", "<undefined>"])
         return len(code.names) - 1
 
 
@@ -850,6 +849,8 @@ def at_fn(parse, id):  # <@name>
 
 
 def extra_fn(code, extend):
+    if extend == "<undefined>":  # TODO improve..
+        return ["ext", dump_fn, ""]
     if extend == "<dump>":
         return ["ext", dump_fn, ""]
     if extend[1] == "@":  # <@rule>
