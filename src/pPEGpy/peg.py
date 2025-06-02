@@ -1,10 +1,12 @@
-# pPEGpy -- run with Python 3.10+   2025-05-22
+# pPEGpy -- run with Python 3.10+   2025-06-02
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
 # pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
 #  -- fix roll back, add test-peg  => PiPy 0.3.5
 #  -- improve dump to show !fail or -roll back  => PiPy 0.3.6
 # pPEGpy-14.py -- change roll-back, use seq reset => PiPy 0.3.7
+#  -- simplify Code to take a boot=ptree optional argument
+#  -- add a parse debug option to dump the parse tree => PiPy 0.3.8
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -41,7 +43,7 @@ _     = ([ \t\n\r]+ / '#' ~[\n\r]*)*
 
 
 class Parse:
-    def __init__(self, code: Code, input: str):
+    def __init__(self, code: Code, input: str, **opt):
         self.ok = True
         self.code = code
         self.input = input
@@ -122,8 +124,8 @@ class Parse:
 # -- the parser function itself -------------------
 
 
-def parser(code: Code, input: str) -> Parse:
-    parse = Parse(code, input)
+def parser(code: Code, input: str, **opt) -> Parse:
+    parse = Parse(code, input, **opt)
     if not code.ok:
         parse.ok = False
         return parse
@@ -132,6 +134,9 @@ def parser(code: Code, input: str) -> Parse:
         parse.end_pos = parse.pos
         ok = False
     parse.ok = ok
+    if (x := opt.get("debug", None)) is not None:
+        print(x)
+        parse.dump(x)
     if parse.ok:
         prune_tree(parse)  # delete failures and redundant heads
     return parse
@@ -405,15 +410,15 @@ def show_tree(parse: Parse) -> str:
 
 def dump_tree(parse: Parse, filter=1) -> None:
     print("Node Size Span    Tree                                  Input...", end="")
-    failed = False  # flag any failed nodes (for an end note)
+    # failed = False  # flag any failed nodes (for an end note)
     pos = 0  # to fill in any anon text matched between nodes
     for i in range(0, len(parse.ends)):
         ident = parse.idents[i]
         id = ident >> 4
         name = parse.code.names[id]
         fail = (ident & FAIL) != 0
-        if fail:
-            failed = True  # just for a note at end of the dump output
+        # if fail:
+        #     failed = True  # just for a note at end of the dump output
         start = parse.starts[i]
         end = parse.ends[i]
         shape = parse.sizes[i]
@@ -422,10 +427,10 @@ def dump_tree(parse: Parse, filter=1) -> None:
         if fail:
             if filter == 1 and start == end:
                 continue
-            if ident & FALL != 0:  # roll back
-                name = "-" + name
-            else:  # FELL real failure
+            if ident & FELL != 0:  # real failure
                 name = "!" + name
+            else:  # FALL roll back
+                name = "-" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -446,7 +451,7 @@ def dump_tree(parse: Parse, filter=1) -> None:
     if pos < parse.max_pos:  # final last node anon text...
         anon = f" -> {parse.input[pos : parse.max_pos]!r}"
     print(anon)
-    if filter == 1 and failed:
+    if filter == 1:  # and failed:
         print(
             "Note: empty failures have been omitted (use parse.dump(0) to see everything)."
         )
@@ -549,14 +554,17 @@ def err_report(parse):
 
 
 class Code:
-    def __init__(self, peg_parse, extras=None, boot=None):
+    # def __init__(self, peg_parse, extras=None, boot=None):
+    #     self.peg_parse = peg_parse  # Parse of Peg grammar (None for boot)
+    #     self.ptree = boot or peg_parse.tree()
+    def __init__(self, peg_parse, **opt):
         self.peg_parse = peg_parse  # Parse of Peg grammar (None for boot)
-        self.ptree = boot or peg_parse.tree()
+        self.ptree = peg_parse.tree() if peg_parse else opt["boot"]
         self.names = []  # rule name
         self.rules = []  # rule body expr
         self.codes = []  # compiled expr
         self.defs = []  # rule type, defn symbol
-        self.extras = extras  # extension functions
+        self.extras = opt.get("extras", None)  # extension functions
         self.err = []
         self.ok = True
         self.compose()
@@ -575,8 +583,8 @@ class Code:
             lines.append(f"{i:2}: {rule} {DEFS[self.defs[i]]} {self.codes[i]}")
         return "\n".join(lines)
 
-    def parse(self, input):
-        return parser(self, input)
+    def parse(self, input, **opt):
+        return parser(self, input, **opt)
 
     def errors(self):
         return "\n".join(self.err)
@@ -598,7 +606,7 @@ HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
 FAIL = 0xC  #      failure flag bits: FELL | FALL
-FELL = 0x8  #      simple failure: !rule
+FELL = 0x8  #      match failed: !rule
 FALL = 0x4  #      roll-back failure: -rule
 
 # -- compile Parse into Code parser instructions -----------------------------------
@@ -791,14 +799,14 @@ peg_ptree = ['Peg', [
 
 # == pPEG compile API =========================================================
 
-peg_code = Code(None, {}, peg_ptree)  # boot compile
+peg_code = Code(None, boot=peg_ptree)  # boot compile
 
 
-def compile(grammar, extras=None) -> Code:
+def compile(grammar, **extras) -> Code:
     parse = parser(peg_code, grammar)
     if not parse.ok:
         raise SystemExit("*** grammar fault...\n" + err_report(parse))
-    code = Code(parse, extras)
+    code = Code(parse, **extras)
     if not code.ok:
         raise SystemExit("*** grammar errors...\n" + code.errors())
     return code
