@@ -1,4 +1,4 @@
-# pPEGpy -- run with Python 3.10+   2025-06-02
+# pPEGpy -- run with Python 3.10+   2025-06-08
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
 # pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
@@ -6,12 +6,22 @@
 #  -- improve dump to show !fail or -roll back  => PiPy 0.3.6
 # pPEGpy-14.py -- change roll-back, use seq reset => PiPy 0.3.7
 #  -- simplify Code to take a boot=ptree optional argument
-#  -- add a parse debug option to dump the parse tree => PiPy 0.3.8
+#  -- add a parse debug option to dump the parse tree
+# pPEGpy-15.py => PiPy 0.3.8
+# pPEGpy-16.py  2025-06-08
+#  -- improve transform
+#  -- dump 1 default, 2 filter failures
+#  -- extras.py file for extension functions
+
+# TODO
+# - nodes, spans  simplify tree into two arrays rather than four
+# - keep trace and build new pruned tree
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
 import array
 
+import extras  # extension functions
 
 # -- pPEG grammar ------------------------------------------------------------
 
@@ -68,6 +78,12 @@ class Parse:
         self.top = -1  # parent of first node
         self.end_pos = -1  # fell short end pos
 
+        # transform map...
+        self.transforms = None  # for parse.transform(...)
+
+        # extensions state...
+        self.inset = [""]
+
     def __str__(self):
         if self.ok:
             return show_tree(self)
@@ -115,10 +131,9 @@ class Parse:
     def dump(self, filter=1):
         return dump_tree(self, filter)
 
-    def transform(self, i=0, j=-1, **fns):
-        if j < 0:
-            j = self.size(i)
-        return transformer(self, i, j, fns)
+    def transform(self, **fns):
+        self.transforms = fns
+        return transformer(self, 0, self.size(0))
 
 
 # -- the parser function itself -------------------
@@ -134,8 +149,7 @@ def parser(code: Code, input: str, **opt) -> Parse:
         parse.end_pos = parse.pos
         ok = False
     parse.ok = ok
-    if (x := opt.get("debug", None)) is not None:
-        print(x)
+    if (x := opt.get("debug", 0)) != 0:
         parse.dump(x)
     if parse.ok:
         prune_tree(parse)  # delete failures and redundant heads
@@ -190,7 +204,7 @@ def run(parse: Parse, expr: list) -> bool:
             size = end - index
             parse.sizes[index] = (size << 8) | depth
             if not ok:
-                parse.idents[index] |= FELL
+                parse.idents[index] |= FALL
 
             parse.deep -= 1
             return ok
@@ -214,7 +228,7 @@ def run(parse: Parse, expr: list) -> bool:
                 if not run(parse, x):
                     i = index  # parse tree roll-back
                     while i < parse.index:
-                        parse.idents[i] |= FALL
+                        parse.idents[i] |= FELL
                         i += 1
                     return False
             return True
@@ -252,7 +266,7 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos = pos  # reset
             i = index  # parse tree roll-back
             while i < parse.index:
-                parse.idents[i] |= FALL
+                parse.idents[i] |= FELL
                 i += 1
             if op == "!":
                 return not result
@@ -267,7 +281,7 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos = pos  # reset
             i = index  # parse tree roll-back
             while i < parse.index:
-                parse.idents[i] |= FALL
+                parse.idents[i] |= FELL
                 i += 1
             if result:
                 return False
@@ -312,8 +326,8 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos += 1
             return True
 
-        case ["ext", fn, args]:  # compiled from <an extension>
-            return fn(parse, args)  # TODO reset roll-back on failure
+        case ["ext", fn, *args]:  # compiled from <some extension>
+            return fn(parse, *args)  # TODO reset roll-back on failure
 
         case _:
             raise Exception("*** crash: run: undefined expression...")
@@ -410,26 +424,23 @@ def show_tree(parse: Parse) -> str:
 
 def dump_tree(parse: Parse, filter=1) -> None:
     print("Node Size Span    Tree                                  Input...", end="")
-    # failed = False  # flag any failed nodes (for an end note)
     pos = 0  # to fill in any anon text matched between nodes
     for i in range(0, len(parse.ends)):
         ident = parse.idents[i]
         id = ident >> 4
         name = parse.code.names[id]
         fail = (ident & FAIL) != 0
-        # if fail:
-        #     failed = True  # just for a note at end of the dump output
         start = parse.starts[i]
         end = parse.ends[i]
         shape = parse.sizes[i]
         size = shape >> 8
         depth = shape & 0xFF
         if fail:
-            if filter == 1 and start == end:
+            if filter == 2 and start == end:
                 continue
-            if ident & FELL != 0:  # real failure
+            if ident & FALL != 0:  # real failure
                 name = "!" + name
-            else:  # FALL roll back
+            else:  # FELL roll back
                 name = "-" + name
         anon = ""
         if pos < start:
@@ -451,9 +462,9 @@ def dump_tree(parse: Parse, filter=1) -> None:
     if pos < parse.max_pos:  # final last node anon text...
         anon = f" -> {parse.input[pos : parse.max_pos]!r}"
     print(anon)
-    if filter == 1:  # and failed:
+    if filter == 2:
         print(
-            "Note: empty failures have been omitted (use parse.dump(0) to see everything)."
+            "Note: empty failures have been omitted (use parse.dump(1) to see everything)."
         )
 
 
@@ -509,9 +520,11 @@ def line_number(input, i):
 
 
 def rule_info(parse):
+    if parse.end_pos == parse.pos:  # parse did not fail
+        return "unexpected input, parse ok on input before this"
     first = parse.first  # > peak failure
     top = parse.top  # >= root failure
-    if top > first and parse.end_pos > -1:
+    if top > first:  # and parse.end_pos > -1:
         return "unexpected ending"
     target = first
     if first < len(parse.ends) - 1 and top < first:
@@ -535,12 +548,12 @@ def src_map(parse, name, note=""):
             continue
         if peg_parse.text(i + 1) != name:
             continue
-        lines.append(f"{peg_parse.text(i)!r}")
+        lines.append(f"{peg_parse.text(i).strip()}")
     return "\n".join(lines)
 
 
 def err_report(parse):
-    note = "... for more details use: parse.dump() ..."
+    note = "... for more details use: parse.dump(1) ..."
     at_pos = f"at: {max(parse.pos, parse.max_pos)} of: {parse.end}  {note}"
     if parse.code and parse.code.err:
         title = f"*** grammar failed {at_pos}"
@@ -554,9 +567,6 @@ def err_report(parse):
 
 
 class Code:
-    # def __init__(self, peg_parse, extras=None, boot=None):
-    #     self.peg_parse = peg_parse  # Parse of Peg grammar (None for boot)
-    #     self.ptree = boot or peg_parse.tree()
     def __init__(self, peg_parse, **opt):
         self.peg_parse = peg_parse  # Parse of Peg grammar (None for boot)
         self.ptree = peg_parse.tree() if peg_parse else opt["boot"]
@@ -589,8 +599,16 @@ class Code:
     def errors(self):
         return "\n".join(self.err)
 
-    def name_id(self, name):  # TODO handle ValueError
-        return self.names.index(name)
+    # def name_id(self, name):  # TODO handle ValueError
+    #     return self.names.index(name)
+    def name_id(self, name):
+        try:
+            idx = self.names.index(name)
+            return idx
+        except ValueError:
+            self.err.append(f"undefined rule: {name}")
+            code_rule_defs(self, name, "=", ["extn", "<undefined>"])
+            return len(self.names) - 1
 
     def id_name(self, id):  # TODO handle IndexError
         return self.names[id]
@@ -605,9 +623,9 @@ ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
-FAIL = 0xC  #      failure flag bits: FELL | FALL
-FELL = 0x8  #      match failed: !rule
-FALL = 0x4  #      roll-back failure: -rule
+FAIL = 0xC  #      failure flag bits: FALL | FELL
+FALL = 0x8  #      match failed: !rule
+FELL = 0x4  #      roll-back cancel: -rule
 
 # -- compile Parse into Code parser instructions -----------------------------------
 
@@ -632,7 +650,7 @@ def code_rule_defs(code, name, defn, expr):
     try:
         defx = DEFS.index(defn)
     except ValueError:
-        defx = FELL
+        defx = FALL
         code.err.append(f"undefined: {name} {defn} ...")
     if defx == EQ:
         if name[0] == "_":
@@ -642,20 +660,20 @@ def code_rule_defs(code, name, defn, expr):
     code.defs.append(defx)
 
 
-def name_id(code, name):
-    try:
-        idx = code.names.index(name)
-        return idx
-    except ValueError:
-        code.err.append(f"undefined rule: {name}")
-        code_rule_defs(code, name, "=", ["extn", "<undefined>"])
-        return len(code.names) - 1
+# def name_id(code, name):
+#     try:
+#         idx = code.names.index(name)
+#         return idx
+#     except ValueError:
+#         code.err.append(f"undefined rule: {name}")
+#         code_rule_defs(code, name, "=", ["extn", "<undefined>"])
+#         return len(code.names) - 1
 
 
 def emit(code, expr):
     match expr:
         case ["id", name]:
-            id = name_id(code, name)
+            id = code.name_id(name)
             return ["id", id]
         case ["alt", nodes]:
             return ["alt", [emit(code, x) for x in nodes]]
@@ -689,7 +707,7 @@ def emit(code, expr):
         case ["dot", _]:
             return ["dot"]
         case ["extn", extend]:
-            return extra_fn(code, extend)
+            return ["ext", *extras.extra_fn(code, extend)]
         case _:
             raise Exception(f"*** crash: emit: undefined expression: {expr}")
 
@@ -737,11 +755,12 @@ def hex_value(n, s, i):
 # -- parse.transform -----------------------------------------------------------
 
 
-def transformer(p: Parse, i, j, fns):
+def transformer(p: Parse, i, j):
     vals = []
     while i < j:
         name = p.name(i)
-        fn = fns.get(name)
+        # fn = fns.get(name)
+        fn = p.transforms.get(name)
         if p.leaf(i):
             text = p.text(i)
             i += 1
@@ -751,7 +770,7 @@ def transformer(p: Parse, i, j, fns):
                 vals.append([name, text])
         else:
             k = i + p.size(i)
-            result = transformer(p, i + 1, k, fns)
+            result = transformer(p, i + 1, k)
             i = k
             if fn:
                 vals.append(apply(name, fn, result))
@@ -813,60 +832,3 @@ def compile(grammar, **extras) -> Code:
 
 
 peg_code = compile(peg_grammar)  # to improve grammar error reporting
-
-
-# == extension functions ==============================================
-
-
-def dump_fn(parse, _):  # <dump>
-    parse.dump()
-    return True
-
-
-def at_fn(parse, id):  # <@name>
-    pos = parse.pos
-    n = len(parse.starts) - 1
-    d = parse.deep  # depth(n)
-    hits = 0
-    while n >= 0:
-        k = parse.depth(n)
-        # <@name> may be in it's own rule, if so adjust it's depth....
-        if hits == 0 and k < d:
-            d -= 1
-            continue
-        if parse.id(n) == id:
-            hits += 1
-            if k > d or parse.fail(n) or parse.ends[n] > pos:
-                n -= 1
-                continue
-            start = parse.starts[n]
-            end = parse.ends[n]
-            if pos + end - start > parse.end:
-                return False
-            for i in range(start, end):
-                if parse.input[i] != parse.input[pos]:
-                    return False
-                pos += 1
-            parse.pos = pos
-            return True
-        n -= 1
-    return hits == 0  # no prior to be matched
-
-
-# -- compile extension --------------------------------------
-
-
-def extra_fn(code, extend):
-    if extend == "<undefined>":  # TODO improve..
-        return ["ext", dump_fn, ""]
-    if extend == "<dump>":
-        return ["ext", dump_fn, ""]
-    if extend[1] == "@":  # <@rule>
-        id = name_id(code, extend[2:-1])
-        return ["ext", at_fn, id]
-    # <command args...>
-    # args = extend[1:-1].split()
-    # extra = code.extras.get(args[0], None)
-    # if extra:  # TODO compile extra -> ['ext', fn, args]
-    #     return ["ext", extra, id, args]
-    raise NameError(f"*** Undefined extension: {extend} ...")
