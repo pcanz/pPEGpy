@@ -2,12 +2,12 @@ import pPEGpy as peg
 
 # Context Sensitive Grammars
 
-# using <@name> to match a name rule result the same-again
+# using <same name> to match a name rule result the same-again
 
 # basic test...
 
 code = peg.compile("""
-    s = x ':' <@x>
+    s = x ':' <same x>
     x = [a-z]*
 """)
 
@@ -18,7 +18,7 @@ print(code.parse("abc:abc"))
 code = peg.compile("""
     p  = x m x_
     x  = [a-z]
-    x_ = <@x>
+    x_ = <same x>
     m  = (x &x)*
 """)
 
@@ -30,7 +30,7 @@ print(p)
 
 code = peg.compile("""
     Code = tics code tics
-    code = ~<@tics>*
+    code = ~<same tics>*
     tics = [`]+
 """)
 
@@ -42,7 +42,7 @@ print(p)
 
 raw = peg.compile("""
     Raw   = fence '"' raw '"' fence
-    raw   = ~('"' <@fence>)*
+    raw   = ~('"' <same fence>)*
     fence = '#'+
 """)
 
@@ -52,8 +52,8 @@ print(raw.parse("""##"abcc#"x"#def"##"""))
 
 blocks = peg.compile("""
     Blk    = inset line (next / inlay)*
-    next   = <@inset> !' ' line
-    inlay  = &(<@inset> ' ') Blk
+    next   = <same inset> !' ' line
+    inlay  = &(<same inset> ' ') Blk
     inset  = ' '+
     line   = ~[\n\r]* '\r'? '\n'?
 """)

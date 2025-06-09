@@ -1,17 +1,17 @@
-# pPEGpy -- run with Python 3.10+   2025-06-08
+# pPEGpy -- run with Python 3.10+   2025-06-09
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
-# pPEGpy-13.py  -- add extension functions: <@name> <dump> => PiPy 0.3.4
-#  -- fix roll back, add test-peg  => PiPy 0.3.5
-#  -- improve dump to show !fail or -roll back  => PiPy 0.3.6
-# pPEGpy-14.py -- change roll-back, use seq reset => PiPy 0.3.7
+# pPEGpy-13.py  -- add extension functions: <@name> <dump> => PyPi 0.3.4
+#  -- fix roll back, add test-peg  => PyPi 0.3.5
+#  -- improve dump to show !fail or -roll back  => PyPi 0.3.6
+# pPEGpy-14.py -- change roll-back, use seq reset => PyPi 0.3.7
 #  -- simplify Code to take a boot=ptree optional argument
 #  -- add a parse debug option to dump the parse tree
-# pPEGpy-15.py => PiPy 0.3.8
-# pPEGpy-16.py  2025-06-08
+# pPEGpy-15.py => PyPi 0.3.8
+# pPEGpy-16.py  2025-06-09  => PyPi 0.3.9 failed with extras file => 0.3.10
 #  -- improve transform
 #  -- dump 1 default, 2 filter failures
-#  -- extras.py file for extension functions
+#  -- extras.py file for extension functions -- abandoned, append here
 
 # TODO
 # - nodes, spans  simplify tree into two arrays rather than four
@@ -21,7 +21,7 @@ from __future__ import annotations  # parser() has a forward ref to Code as type
 
 import array
 
-import extras  # extension functions
+# import extras  # extension functions # included at the end of this file
 
 # -- pPEG grammar ------------------------------------------------------------
 
@@ -660,16 +660,6 @@ def code_rule_defs(code, name, defn, expr):
     code.defs.append(defx)
 
 
-# def name_id(code, name):
-#     try:
-#         idx = code.names.index(name)
-#         return idx
-#     except ValueError:
-#         code.err.append(f"undefined rule: {name}")
-#         code_rule_defs(code, name, "=", ["extn", "<undefined>"])
-#         return len(code.names) - 1
-
-
 def emit(code, expr):
     match expr:
         case ["id", name]:
@@ -707,9 +697,26 @@ def emit(code, expr):
         case ["dot", _]:
             return ["dot"]
         case ["extn", extend]:
-            return ["ext", *extras.extra_fn(code, extend)]
+            return ["ext", *extra_fn(code, extend)]
         case _:
             raise Exception(f"*** crash: emit: undefined expression: {expr}")
+
+
+# -- compile extension --------------------------------------
+
+
+def extra_fn(code, extend):
+    args = extend[1:-1].split()  # <command args...>
+    op, n = extra_fns.get(args[0], (None, 0))  # (fn, n) n = number of id args
+    if op is None:
+        raise NameError(f"*** Undefined extension: {extend} ...")
+    op_args = [op]
+    for i in range(1, n + 1):
+        op_args.append(code.name_id(args[i]))
+    return op_args
+
+
+# -- escape codes ----------------------
 
 
 def escape(s, code):
@@ -832,3 +839,134 @@ def compile(grammar, **extras) -> Code:
 
 
 peg_code = compile(peg_grammar)  # to improve grammar error reporting
+
+
+# == extension functions ==============================================
+
+
+def dump_fn(parse):  # <dump>
+    parse.dump(1)
+    return True
+
+
+def eq_fn(parse, id1, id2):  # <eq x y>
+    x = None
+    y = None
+    n = len(parse.starts) - 1
+    while n >= 0:
+        if parse.fail(n):
+            n -= 1
+            continue
+        id = parse.id(n)
+        if x is None and id == id1:
+            x = n
+        if y is None and id == id2:
+            y = n
+        if x and y:
+            dx = parse.depth(x)
+            dy = parse.depth(y)
+            if x < y:
+                if dx <= dy:
+                    break
+                else:
+                    x = None  # try again
+            if y < x:
+                if dy <= dx:
+                    break
+                else:
+                    y = None  # try again
+        n -= 1
+    if x is None or y is None:
+        return False  # TODO err no x or y found
+    if parse.text(x) == parse.text(y):
+        return True
+    return False
+
+
+def same_fn(parse, id):  # <same x>
+    pos = parse.pos
+    n = len(parse.starts) - 1
+    d = parse.deep  # depth(n)
+    hits = 0
+    while n >= 0:
+        k = parse.depth(n)
+        # <@name> may be in it's own rule, if so adjust it's depth....
+        if hits == 0 and k < d:
+            d -= 1
+            continue
+        if parse.id(n) == id:
+            hits += 1
+            if k > d or parse.fail(n) or parse.ends[n] > pos:
+                n -= 1
+                continue
+            start = parse.starts[n]
+            end = parse.ends[n]
+            if pos + end - start > parse.end:
+                return False
+            for i in range(start, end):
+                if parse.input[i] != parse.input[pos]:
+                    return False
+                pos += 1
+            parse.pos = pos
+            return True
+        n -= 1
+    return hits == 0  # no prior to be matched
+
+
+# -- Python style indent, inset, undent ----------------
+
+
+def indent_fn(parse):  # TODO parse.inset => parse.extra_state['inset']
+    pos = parse.pos
+    if pos >= parse.end:
+        return False
+    char = parse.input[pos]
+    pos += 1
+    if char == " ":
+        while parse.input[pos] == " ":
+            pos += 1
+    elif char == "\t":
+        while parse.input[pos] == "\t":
+            pos += 1
+    else:
+        return False
+    inset = parse.inset[-1]
+    if len(inset) >= pos - parse.pos:
+        return False
+    parse.inset.append(parse.input[parse.pos : pos])
+    parse.pos = pos
+    return True
+
+
+def inset_fn(parse):
+    inset = parse.inset[-1]
+    pos = parse.pos
+    if pos + len(inset) >= parse.end:
+        return False
+    for x in inset:
+        if parse.input[pos] != x:  # TODO err report
+            return False
+        pos += 1
+    parse.pos = pos
+    return True
+
+
+def undent_fn(parse):
+    if len(parse.inset) < 1:  # TODO err
+        print("*** <undent> err, empty inset stack...")
+        return False
+    parse.inset.pop()
+    return True
+
+
+# -- function map -------------------
+
+extra_fns = {  # => (fn, n) n = number of id args
+    "dump": (dump_fn, 0),
+    "undefined": (dump_fn, 0),
+    "same": (same_fn, 1),
+    "eq": (eq_fn, 2),
+    "indent": (indent_fn, 0),
+    "inset": (inset_fn, 0),
+    "undent": (undent_fn, 0),
+}
