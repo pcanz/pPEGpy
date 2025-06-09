@@ -1,4 +1,4 @@
-import pPEGpy as peg
+from pPEGpy import peg
 
 # Context Sensitive Grammars
 
