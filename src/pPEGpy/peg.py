@@ -16,11 +16,12 @@
 # - nodes, spans  simplify tree into two arrays rather than four
 # - improve <indent>
 # - external extensions
+# pPEGpy-18.py  2025-06-13
+# - simplify trace parse tree to used depth only (no size)
 
 
 # TODO
 # - keep trace and build new pruned tree
-# - API for user extension functions, as optional compile args
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -79,8 +80,8 @@ class Parse:
         self.pos = 0
         self.end = len(input)
 
-        # parse tree arrays -- Q = 64 bits
-        self.nodes = array.array("Q")  # <<dx:8, depth:8, id:16, size:32>>
+        # parse tree arrays -- Q = 64 bits, L = 32 bits
+        self.nodes = array.array("L")  # <<dx:8, id:12, depth:12>>
         self.spans = array.array("Q")  # <<start:32, end:32>>
 
         # run state...
@@ -109,8 +110,8 @@ class Parse:
 
     # -- parse tree methods ---------------------------
 
-    def id(self, i):  # <<dx:8, depth:8, id:16, size:32>>
-        return (self.nodes[i] >> 32) & 0xFFFF
+    def id(self, i):  # <<dx:8, id:12, depth:12>>
+        return (self.nodes[i] >> 12) & 0xFFF
 
     def name(self, i):  # parse tree node name
         return self.code.names[self.id(i)]
@@ -123,36 +124,26 @@ class Parse:
         start, end = self.span(i)
         return self.input[start:end]
 
-    def size(self, i):  # <<dx:8, depth:8, id:16, size:32>>
-        return self.nodes[i] & 0xFFFF_FFFF
-
-    def depth(self, i):  # <<dx:8, depth:8, id:16, size:32>>
-        return (self.nodes[i] >> 48) & 0xFF
+    def depth(self, i):  # <<dx:8, id:12, depth:12>>
+        return self.nodes[i] & 0xFFF
 
     def leaf(self, i):  # is a terminal node?
-        return (self.nodes[i] >> 56) & 0x3 == TERM
+        return (self.nodes[i] >> 24) & 0x3 == TERM
 
-    def fail(self, i):  # failed node?  FAIL = 0xC == fail 0x8 | roll back 0x4
-        return ((self.nodes[i] >> 56) & FAIL) != 0
+    def fail(self, i):  # failed node?  FAIL = 0xC == fail 0x8 | fall back 0x4
+        return ((self.nodes[i] >> 24) & FAIL) != 0
 
     def dx(self, i):
-        return self.nodes[i] >> 56
+        return self.nodes[i] >> 24
 
     def tree(self):
-        ptree = p_tree(self, 0, len(self.nodes))
+        ptree, _ = p_tree(self, 0, 0)
         if not ptree:
             return []
         return ptree[0]
 
-    def dtree(self):
-        ptree = d_tree(self, 0, 0)
-        return ptree
-        # if not ptree:
-        #     return []
-        # return ptree[0]
-
     def itree(self):
-        itree = i_tree(self, 0, len(self.nodes))
+        itree, _ = i_tree(self, 0, 0)
         if not itree:
             return []
         return itree[0]
@@ -162,7 +153,8 @@ class Parse:
 
     def transform(self, **fns):
         self.transforms = fns
-        return transformer(self, 0, self.size(0))
+        result, _ = transformer(self, 0, 0)
+        return result
 
 
 # -- the parser function itself -------------------
@@ -211,8 +203,8 @@ def run(parse: Parse, expr: list) -> bool:
 
             # parse tree array - enter node ------------
             index = parse.index  # this node == len(parse.nodes)
-            parse.index += 1  # <<dx:8, depth:8, id:16, size:32>>
-            parse.nodes.append(defx << 56 | depth << 48 | idx << 32)
+            parse.index += 1  # <<dx:8, id:12, depth:12>>
+            parse.nodes.append(defx << 24 | idx << 12 | depth)
             parse.spans.append(pos << 32)
 
             # -- run -----------------------
@@ -228,11 +220,8 @@ def run(parse: Parse, expr: list) -> bool:
 
             # parse tree ---------------
             parse.spans[index] |= parse.pos
-            end = len(parse.nodes)
-            size = end - index
-            parse.nodes[index] |= size
-            if not ok:  # <<dx:8, depth:8, id:16, size:32>>
-                parse.nodes[index] |= FALL << 56
+            if not ok:  # <<dx:8, id:12, depth:12>>
+                parse.nodes[index] |= FALL << 24
 
             parse.deep -= 1
             return ok
@@ -255,7 +244,7 @@ def run(parse: Parse, expr: list) -> bool:
             for i, x in enumerate(list):
                 if not run(parse, x):
                     while index < parse.index:  # fall-back
-                        parse.nodes[index] |= FELL << 56
+                        parse.nodes[index] |= FELL << 24
                         index += 1  # cancel parse tree nodes
                     return False
             return True
@@ -293,7 +282,7 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos = pos  # reset
             i = index  # parse tree fall-back
             while i < parse.index:
-                parse.nodes[i] |= FELL << 56
+                parse.nodes[i] |= FELL << 24
                 i += 1
             if op == "!":
                 return not result
@@ -308,7 +297,7 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos = pos  # reset
             i = index  # parse tree fall-back
             while i < parse.index:
-                parse.nodes[i] |= FELL << 56
+                parse.nodes[i] |= FELL << 24
                 i += 1
             if result:
                 return False
@@ -362,88 +351,98 @@ def run(parse: Parse, expr: list) -> bool:
 
 # -- prune parse tree -- removes failures and redundant nodes -------------------
 
-# failures are included in the parse tree to help with debug and fault reporting
-# it is more efficient to delete redundant nodes as a separate pass at the end..
+# failures are included in the trace parse tree to help with debug and fault reporting
+# redundant nodes are removed to simplify the parse tree for use in applications
 
 
 def prune_tree(parse):
-    # These were too tricky for me to combine!  So two steps...
-    _, i = prune(parse, 1, 0, len(parse.nodes), 0, 0)  # step 1 delete failures
-    _, j = prune(parse, 2, 0, i, 0, 0)  # step 2 delete redundant nodes
-    while j < len(parse.nodes):  # array API has no len/cap access
+    _, k = prune(parse, 0, 0, 0, 0)
+    while k < len(parse.nodes):  # array API has no len/cap access
         parse.nodes.pop()
         parse.spans.pop()
 
 
-def prune(parse, step, i, j, k, depth):  #  -> (i, k)
-    while i < j:  # read: i..j  ==>  write: k..
-        node = parse.nodes[i]  # <<dx:8, depth:8, id:16, size:32>>
-        dx = node >> 56
-        fail = dx & FAIL != 0
-        size = node & 0xFFFF_FFFF
-        if fail:  # step == 1
-            i += size
+def prune(p, i, d, n, k):  #  -> (i, k)
+    # read from i: (i, dep)  ==>  write to k: (k, dep-n)
+    # d = depth of parent node, n = delta depth (deleted redundant nodes)
+    j = len(p.nodes)
+    while i < j and (dep := p.depth(i)) >= d:
+        if p.fail(i):
+            i += 1
+            while i < len(p.nodes) and p.depth(i) > dep:
+                i += 1  # skip over any children...
             continue
-        defx = dx & 3
-        start, end = parse.span(i)
-        if size == 1 or (step == 2 and ((node >> 56) & 3) == TERM):
-            i1 = i + size
-            k1 = k + 1
-        else:
-            if step == 2 and defx == EQ:  # delete if redundant
-                if i + 1 < j and size - 1 == parse.size(i + 1):
-                    i += 1
-                    continue
-            i1, k1 = prune(parse, step, i + 1, i + size, k + 1, depth + 1)
-            size = k1 - k
-        if size == 1 and defx != HEAD:
-            defx = TERM  # leaf node
-        parse.nodes[k] = defx << 56 | depth << 48 | node & 0xFFFF_0000_0000 | size
-        parse.spans[k] = (start << 32) | end
-        k = k1
-        i = i1
+        count = child_count(p, i + 1, dep + 1)
+        if count == 1:  # single child => redundant node
+            i, k = prune(p, i + 1, dep + 1, n + 1, k)
+            continue
+        dx = p.dx(i)  # <<dx:8, id:12, depth:12>>
+        if count == 0 and dx != HEAD:
+            dx = TERM  # leaf node
+        p.nodes[k] = dx << 24 | p.id(i) << 12 | dep - n
+        p.spans[k] = p.spans[i]
+        k += 1
+        i += 1
     return (i, k)
+
+
+def child_count(p, i, d):
+    count = 0
+    j = len(p.nodes)
+    while i < j:
+        dep = p.depth(i)
+        if dep < d:  # no more children at this depth
+            break
+        if dep == d:
+            if p.fail(i):
+                i += 1
+                while i < j and p.depth(i) > dep:
+                    i += 1
+                continue
+            count += 1
+            if count > 1:  # second child
+                return count
+        i += 1
+    return count
 
 
 # -- ptree json -----------------------------------------------------------------
 
 
-def p_tree(parse: Parse, i, j):
+def p_tree(parse, i, d) -> tuple[list, int]:
     arr = []
-    while i < j:
-        if parse.leaf(i):
-            arr.append([parse.name(i), parse.text(i)])
-        else:
-            arr.append([parse.name(i), p_tree(parse, i + 1, i + parse.size(i))])
-        i += parse.size(i)
-    return arr
-
-
-def d_tree(parse, i, d):
-    arr = []
-    while i < len(parse.nodes) and parse.depth(i) >= d:
+    while i < len(parse.nodes):
+        dep = parse.depth(i)
+        if dep < d:  # no more children at this depth
+            break
         if parse.leaf(i):
             arr.append([parse.name(i), parse.text(i)])
             i += 1
         else:
-            children = d_tree(parse, i + 1, d + 1)
+            children, i1 = p_tree(parse, i + 1, dep + 1)
             arr.append([parse.name(i), children])
-            i += len(children) + 1
-    return arr
+            i = i1
+    return arr, i
 
 
 # -- itree json -----------------------------------------------------------------
 
 
-def i_tree(p: Parse, i, j):
+def i_tree(parse, i, d) -> tuple[list, int]:
     arr = []
-    while i < j:
-        size = p.size(i)
-        args = None if p.leaf(i) else i_tree(p, i + 1, i + size)
-        start, end = p.span(i)
-        arr.append([p.name(i), start, end, args])
-        i += size
-    return arr
+    while i < len(parse.nodes):
+        dep = parse.depth(i)
+        if dep < d:  # no more children at this depth
+            break
+        start, end = parse.span(i)
+        if parse.leaf(i):
+            arr.append([parse.name(i), start, end, None])
+            i += 1
+        else:
+            children, i1 = i_tree(parse, i + 1, dep + 1)
+            arr.append([parse.name(i), start, end, children])
+            i = i1
+    return arr, i
 
 
 # -- ptree line diagram --------------------------------------------------------
@@ -467,7 +466,6 @@ def dump_tree(parse: Parse, filter=1) -> None:
         name = parse.name(i)
         fail = parse.fail(i)
         start, end = parse.span(i)
-        size = parse.size(i)
         depth = parse.depth(i)
         if fail:
             if filter == 2 and start == end:
@@ -482,7 +480,7 @@ def dump_tree(parse: Parse, filter=1) -> None:
         pos = end
         print(anon)  # appends '-> anon' to end of line for previous node
         # now for the node print out....
-        init = f"{i:3} {size:3} {start:3}..{end}"
+        init = f"{i:3} {depth:3} {start:3}..{end}"
         value = f"{repr(parse.input[start:end])}" if parse.dx(i) & 3 == TERM else ""
         report = f"{init:16}  {indent_bars(depth)}{name} {value}"
         etc = ""  # truncate long lines...
@@ -786,9 +784,12 @@ def hex_value(n, s, i):
 # -- parse.transform -----------------------------------------------------------
 
 
-def transformer(p: Parse, i, j):
+def transformer(p: Parse, i, d) -> tuple[list, int]:
     vals = []
-    while i < j:
+    while i < len(p.nodes):
+        dep = p.depth(i)
+        if dep < d:  # no more children at this depth
+            break
         name = p.name(i)
         fn = p.transforms.get(name)
         if p.leaf(i):
@@ -799,16 +800,14 @@ def transformer(p: Parse, i, j):
             else:
                 vals.append([name, text])
         else:
-            k = i + p.size(i)
-            result = transformer(p, i + 1, k)
-            i = k
+            result, i = transformer(p, i + 1, dep + 1)
             if fn:
                 vals.append(apply(name, fn, result))
             else:
                 vals.append([name, result])
     if len(vals) == 1:
-        return vals[0]
-    return vals
+        return vals[0], i
+    return vals, i
 
 
 def apply(name, fn, args):
