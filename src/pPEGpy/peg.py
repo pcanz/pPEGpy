@@ -16,12 +16,13 @@
 # - nodes, spans  simplify tree into two arrays rather than four
 # - improve <indent>
 # - external extensions
-# pPEGpy-18.py  2025-06-13
+# pPEGpy-18.py  2025-06-17 => PyPi 0.3.11
 # - simplify trace parse tree to used depth only (no size)
 
 
 # TODO
 # - keep trace and build new pruned tree
+# - add a <match rule> extra to enable palindrome grammar
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -133,7 +134,10 @@ class Parse:
     def fail(self, i):  # failed node?  FAIL = 0xC == fail 0x8 | fall back 0x4
         return ((self.nodes[i] >> 24) & FAIL) != 0
 
-    def dx(self, i):
+    def defn(self, i):  # rule type EQ|HEAD|TERM|ANON
+        return (self.nodes[i] >> 24) & 3
+
+    def dx(self, i):  # <<dx:8, id:12, depth:12>>
         return self.nodes[i] >> 24
 
     def tree(self):
@@ -373,7 +377,7 @@ def prune(p, i, d, n, k):  #  -> (i, k)
                 i += 1  # skip over any children...
             continue
         count = child_count(p, i + 1, dep + 1)
-        if count == 1:  # single child => redundant node
+        if count == 1 and p.defn(i) != HEAD:  # single child => redundant node
             i, k = prune(p, i + 1, dep + 1, n + 1, k)
             continue
         dx = p.dx(i)  # <<dx:8, id:12, depth:12>>
@@ -460,7 +464,7 @@ def show_tree(parse: Parse) -> str:
 
 
 def dump_tree(parse: Parse, filter=1) -> None:
-    print("Node Size Span    Tree                                  Input...", end="")
+    print("Node Span    Tree                                  Input...", end="")
     pos = 0  # to fill in any anon text matched between nodes
     for i in range(0, len(parse.nodes)):
         name = parse.name(i)
@@ -480,7 +484,7 @@ def dump_tree(parse: Parse, filter=1) -> None:
         pos = end
         print(anon)  # appends '-> anon' to end of line for previous node
         # now for the node print out....
-        init = f"{i:3} {depth:3} {start:3}..{end}"
+        init = f"{i:3} {start:3}..{end}"
         value = f"{repr(parse.input[start:end])}" if parse.dx(i) & 3 == TERM else ""
         report = f"{init:16}  {indent_bars(depth)}{name} {value}"
         etc = ""  # truncate long lines...
@@ -934,7 +938,7 @@ def same_fn(parse, id):  # <same x>
     return hits == 0  # no prior to be matched
 
 
-# -- Python style indent, inset, undent ----------------
+# -- Python style indent, inset, dedent ----------------
 
 
 def inset_stack(parse):
@@ -982,7 +986,7 @@ def inset_fn(parse):
     return True
 
 
-def undent_fn(parse):
+def dedent_fn(parse):
     inset_stack(parse).pop()
     return True
 
@@ -996,5 +1000,5 @@ extra_fns = {  # => (fn, n) n = number of id args
     "eq": (eq_fn, 2),
     "indent": (indent_fn, 0),
     "inset": (inset_fn, 0),
-    "undent": (undent_fn, 0),
+    "dedent": (dedent_fn, 0),
 }
