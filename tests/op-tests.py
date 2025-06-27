@@ -47,9 +47,7 @@ def run_code_tests():
     test_run(["alt", [["quote", "'x'"], ["quote", "'y'"]]], "yz", 1)
     test_run(["alt", [["quote", "'x'"], ["quote", "'y'"]]], "", 0, False)
     test_run(["alt", [["quote", "'x'"], ["quote", "'y'"]]], "k", 0, False)
-    test_run(
-        ["alt", [["quote", "''"], ["quote", "'y'"]]], "y", 1
-    )  # if alt fails an empty match
+    test_run(["alt", [["quote", "''"], ["quote", "'y'"]]], "y", 0)
 
     test_run(["rep", [["quote", "'x'"], ["sfx", "*"]]], "xxx", 3)
     test_run(["rep", [["quote", "'x'"], ["sfx", "*"]]], "", 0)
@@ -58,9 +56,7 @@ def run_code_tests():
     test_run(["rep", [["quote", "'x'"], ["sfx", "?"]]], "x", 1)
     test_run(["rep", [["quote", "'x'"], ["sfx", "?"]]], "k", 0)
     test_run(["rep", [["quote", "'x'"], ["sfx", "?"]]], "xxx", 1)
-    test_run(
-        ["rep", [["quote", "''"], ["sfx", "*"]]], "xxx", 0
-    )  # check for no-progress loop break
+    test_run(["rep", [["quote", "''"], ["sfx", "*"]]], "xxx", 0)
 
     test_run(["pre", [["pfx", "!"], ["quote", "'x'"]]], "y", 0)
     test_run(["pre", [["pfx", "!"], ["quote", "'x'"]]], "x", 0, False)

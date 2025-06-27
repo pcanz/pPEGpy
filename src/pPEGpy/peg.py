@@ -1,4 +1,4 @@
-# pPEGpy -- run with Python 3.10+   2025-06-09
+# pPEGpy -- run with Python 3.10+
 
 # pPEGpy-12.py => copy to pPEGpyas peg.py github repo v0.3.2, and PyPi upload.
 # pPEGpy-13.py  -- add extension functions: <@name> <dump> => PyPi 0.3.4
@@ -18,11 +18,14 @@
 # - external extensions
 # pPEGpy-18.py  2025-06-17 => PyPi 0.3.11
 # - simplify trace parse tree to used depth only (no size)
-
+# pPEGpy-19.py  2025-06-19 => PyPi 0.3.12
+# - add trans() function to apply transforms to core parse tree
+# - FAIL flag only, remove FALL and FELL flags
+# + add more op-tests.py, peg-test.py tests
 
 # TODO
 # - keep trace and build new pruned tree
-# - add a <match rule> extra to enable palindrome grammar
+# - add a <match rule> or <parse x y>  to enable palindrome grammar
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -64,11 +67,7 @@ EQ = 0  # =    dynamic children: 0 => TERM, 1 => redundant, >1 => HEAD
 ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
-
-FAIL = 0xC  #      failure flag bits: FALL | FELL
-FALL = 0x8  #      match failed: !rule
-FELL = 0x4  #      fall-back cancel: -rule
-
+FAIL = 4  # !    fail flag
 
 # -- Parse context for parser run function -----------------------------------
 
@@ -79,7 +78,7 @@ class Parse:
         self.code = code
         self.input = input
         self.pos = 0
-        self.end = len(input)
+        self.end = opt.get("end", len(input))
 
         # parse tree arrays -- Q = 64 bits, L = 32 bits
         self.nodes = array.array("L")  # <<dx:8, id:12, depth:12>>
@@ -131,7 +130,13 @@ class Parse:
     def leaf(self, i):  # is a terminal node?
         return (self.nodes[i] >> 24) & 0x3 == TERM
 
-    def fail(self, i):  # failed node?  FAIL = 0xC == fail 0x8 | fall back 0x4
+    def next(self, i):  # next node in parse tree
+        d = self.depth(i)
+        while i < len(self.nodes) - 1 and self.depth(i + 1) > d:
+            i += 1
+        return i + 1  # next node at same depth or deeper
+
+    def fail(self, i):  # failed node?
         return ((self.nodes[i] >> 24) & FAIL) != 0
 
     def defn(self, i):  # rule type EQ|HEAD|TERM|ANON
@@ -159,6 +164,14 @@ class Parse:
         self.transforms = fns
         result, _ = transformer(self, 0, 0)
         return result
+
+    def trans(self, **fns):
+        self.transforms = fns
+        result, _ = trans_fn(self, 0, 0)
+        return result
+
+    def apply(self, fn, i):
+        return trans_apply(self, fn, i)
 
 
 # -- the parser function itself -------------------
@@ -225,7 +238,7 @@ def run(parse: Parse, expr: list) -> bool:
             # parse tree ---------------
             parse.spans[index] |= parse.pos
             if not ok:  # <<dx:8, id:12, depth:12>>
-                parse.nodes[index] |= FALL << 24
+                parse.nodes[index] |= FAIL << 24
 
             parse.deep -= 1
             return ok
@@ -235,10 +248,9 @@ def run(parse: Parse, expr: list) -> bool:
             max = pos
             for x in list:
                 if run(parse, x):
-                    if parse.pos > pos:  # treat empty match as failure
-                        return True  # TODO report a warning for this
+                    return True
                 if parse.pos > pos:
-                    max = pos
+                    max = parse.pos
                 parse.pos = pos  # reset (essential)
             parse.pos = max  # to be caught in id
             return False
@@ -247,9 +259,9 @@ def run(parse: Parse, expr: list) -> bool:
             index = parse.index
             for i, x in enumerate(list):
                 if not run(parse, x):
-                    while index < parse.index:  # fall-back
-                        parse.nodes[index] |= FELL << 24
-                        index += 1  # cancel parse tree nodes
+                    while index < parse.index:  # parse tree fall-back
+                        parse.nodes[index] |= FAIL << 24
+                        index += 1
                     return False
             return True
 
@@ -284,10 +296,9 @@ def run(parse: Parse, expr: list) -> bool:
             pos = parse.pos
             result = run(parse, term)
             parse.pos = pos  # reset
-            i = index  # parse tree fall-back
-            while i < parse.index:
-                parse.nodes[i] |= FELL << 24
-                i += 1
+            while index < parse.index:  # parse tree fall-back
+                parse.nodes[index] |= FAIL << 24
+                index += 1
             if op == "!":
                 return not result
             return result
@@ -299,10 +310,9 @@ def run(parse: Parse, expr: list) -> bool:
             pos = parse.pos
             result = run(parse, term)
             parse.pos = pos  # reset
-            i = index  # parse tree fall-back
-            while i < parse.index:
-                parse.nodes[i] |= FELL << 24
-                i += 1
+            while index < parse.index:  # parse tree fall-back
+                parse.nodes[index] |= FAIL << 24
+                index += 1
             if result:
                 return False
             parse.pos += 1
@@ -474,10 +484,7 @@ def dump_tree(parse: Parse, filter=1) -> None:
         if fail:
             if filter == 2 and start == end:
                 continue
-            if parse.dx(i) & FALL != 0:  # real failure
-                name = "!" + name
-            else:  # FELL fall back
-                name = "-" + name
+            name = "!" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -672,7 +679,7 @@ def code_rule_defs(code, name, defn, expr):
     try:
         defx = DEFS.index(defn)
     except ValueError:
-        defx = FALL
+        defx = FAIL
         code.err.append(f"undefined: {name} {defn} ...")
     if defx == EQ:
         if name[0] == "_":
@@ -796,7 +803,10 @@ def transformer(p: Parse, i, d) -> tuple[list, int]:
             break
         name = p.name(i)
         fn = p.transforms.get(name)
-        if p.leaf(i):
+        if fn and name[-1] == "_":
+            vals.append(apply(name, fn, [p, i, d]))
+            i = p.next(i)  # skip over this node
+        elif p.leaf(i):
             text = p.text(i)
             i += 1
             if fn:
@@ -821,6 +831,43 @@ def apply(name, fn, args):
     except Exception as err:
         raise SystemExit(f"*** transform failed: {name}({args})\n{err}")
     return result
+
+
+# -- parse.trans -----------------------------------------------------------
+
+
+def trans_fn(p: Parse, i, d) -> tuple[list, int]:
+    vals = []
+    while i < len(p.nodes) and (dep := p.depth(i)) >= d:
+        name = p.name(i)
+        fn = p.transforms.get(name)
+        if fn:
+            try:
+                result, i = fn(p, i)
+            except Exception as err:
+                raise SystemExit(f"*** transform failed: {p.name(i)}({i})\n{err}")
+            vals.append(result)
+        elif p.leaf(i):
+            vals.append([name, p.text(i)])
+            i += 1
+        else:
+            result, i = trans_fn(p, i + 1, dep + 1)
+            vals.append([name, result])
+    if len(vals) == 1:
+        return vals[0], i
+    return vals, i
+
+
+def trans_apply(p: Parse, fn, i):
+    if p.leaf(i):
+        val = p.text(i)
+        i += 1
+    else:
+        val, i = trans_fn(p, i + 1, p.depth(i) + 1)
+    try:
+        return fn(val), i
+    except Exception as err:
+        raise SystemExit(f"*** transform failed: {p.name(i)}({val})\n{err}")
 
 
 # -- peg_grammar ptree -- bootstrap generated ---------------------------------------------------------
@@ -896,7 +943,7 @@ def eq_fn(parse, id1, id2):  # <eq x y>
                     break
                 else:
                     x = None  # try again
-            if y < x:
+            elif y < x:
                 if dy <= dx:
                     break
                 else:

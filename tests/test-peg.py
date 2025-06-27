@@ -1,16 +1,17 @@
-from pPEGpy import peg
+# from pPEGpy import peg
+import pPEGpy as peg
 
 # == grammar testing =============================
 
 tests = [
-    [""" # check numeric repeat...
+    [""" # 0: check numeric repeat...
     s = x*3
     x = [a-z]
     """,[
     ('abc', ['s',[['x','a'],['x','b'],['x','c']]]),
     ('ab', [])
     ]],
-    [""" # check numeric repeat closed range...
+    [""" # 1: check numeric repeat closed range...
     s = x*3..5
     x = [a-z]
     """,[
@@ -20,7 +21,7 @@ tests = [
     ('ab', []),
     ('abcdef', []),
     ]],
-    [""" # check numeric repeat open range...
+    [""" # 2: check numeric repeat open range...
     s = x*2..
     x = [a-z]
     """,[
@@ -29,14 +30,85 @@ tests = [
     ('abcdefg', ['s',[['x','a'],['x','b'],['x','c'],['x','d'],['x','e'],['x','f'],['x','g']]]),
     ('a', []),
     ]],
-    [""" # check roll back nodes have been marked as failed ...
+    [""" # 3: check * any and ? optional ...
+    s = x* '|' y?
+    x = [a-z]+
+    y = [a-z]+
+    """,[
+    ('abc|def', ['s',[['x','abc'],['y','def']]]),
+    ('|', ['s','|']),
+    ]],
+    [""" # 4: check empty alternatives ...
+    s = x* / y? / z
+    x = [0-9]+
+    y = [a-z]+
+    z = [A-Z]*
+    """,[
+    ('123', ['x','123']),
+    ('abc', []),
+    ('ABC', []),
+    ('1aB', []),
+    ('', ['s', '']),
+    ]],
+    [""" # 5: check fall back nodes have been marked as failed ...
     s = t x*
     t = (x x)*
     x = [a-z]
     """,[
     ('a', ['s',[['t',''],['x','a']]]),
+    ('ab', ['t',[['x','a'],['x','b']]]),
     ('abc', ['s',[['t',[['x','a'],['x','b']]],['x','c']]]),
     ('abcd', ['t',[['x','a'],['x','b'],['x','c'],['x','d']]]),
+    ]],
+    [""" # 6: check rule types, elide redundant...
+    s = x? y
+    x = 'x'+
+    y = 'y'*
+    """,[
+    ('xy', ['s',[['x','x'],['y','y']]]),
+    ('yy', ['y','yy']),
+    ]],
+    [""" # 7: check rule types, Cap rule...
+    S = x? y
+    x = 'x'+
+    y = 'y'*
+    """,[
+    ('xy', ['S',[['x','x'],['y','y']]]),
+    ('yy', ['S',[['y','yy']]]),
+    ]],
+    [""" # 8: check rule types, := rule...
+    s := x? y
+    x = 'x'+
+    y = 'y'*
+    """,[
+    ('xy', ['s',[['x','x'],['y','y']]]),
+    ('yy', ['s',[['y','yy']]]),
+    ]],
+    [""" # 9: check !x fall back...
+    s = !x y / z
+    x = 'x' 'y'
+    y = .*
+    z = .*
+    """,[
+    ('xy', ['z','xy']),
+    ('yy', ['y','yy']),
+    ('', ['y','']),
+    ('x', ['y','x']),
+    ]],
+    [""" # 10: check ~x fall back...
+    s = ~x / y
+    x = 'x'
+    y = .*
+    """,[
+    ('xy', ['y','xy']),
+    ('y', ['s','y']),
+    ('', ['y','']),
+    ]],
+    [""" # 11: check empty end ...
+    s = .*
+    """,[
+    ('xy', ['s','xy']),
+    ('', ['s','']),
     ]]
 ]  # fmt:skip
 
@@ -62,11 +134,12 @@ def run_tests():
                 else:
                     fail += 1
             else:  # parse failed...
-                if tree == []:
+                # if tree == []:
+                if verify(t, e, [], tree):
                     ok += 1
                 else:
                     fail += 1
-                    print(f"*** test failed: {grammar}{input}")
+                    # print(f"*** test failed: {grammar}{input}")
     if fail == 0:
         print(f"OK passed all {ok} tests.")
     else:
