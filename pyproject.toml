@@ -1,6 +1,6 @@
 [project]
 name = "pPEGpy"
-version = "0.3.11"
+version = "0.3.13"
 description = "pPEG -- portable PEG in Python"
 readme = "README.md"
 authors = [
