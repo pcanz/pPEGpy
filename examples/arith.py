@@ -1,4 +1,5 @@
-from pPEGpy import peg
+# import pPEGpy as peg  # local file
+from pPEGpy import peg  # pip install pPEGpy
 
 print("Arith operator expression example....")
 
