@@ -49,7 +49,7 @@ list
 ```
 Application can use a `ptree`:
 ```
-ptree = p.tree()
+ptree = p.ptree()
 
 print(ptree)  # =>
 
@@ -86,7 +86,7 @@ URI
 │ path '/pub/ietf/uri/'
 │ frag 'Related'
 ```
-ptree:
+p-tree:
 ```
 ["URI",[["scheme","http"],["auth","www.ics.uci.edu"],
         ["path","/pub/ietf/uri/"],["frag","Related"]]]
@@ -106,10 +106,10 @@ Common usage:
     my_parse = my_parser.parse('...input string...}')
 
     if not my_parse.ok:
-        print(my_parse.err)
-        .... handle parse failure ... 
+        # handle parse failure ... 
+        print(my_parse)
     else:    
-        ptree = my_parse.tree()
+        ptree = my_parse.ptree()
         process(ptree)
 ```
 The `ptree` parse tree type is JSON data, as defined in [pPEG].
