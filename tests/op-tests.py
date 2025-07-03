@@ -1,4 +1,5 @@
-from pPEGpy import Parse, Code, run
+from pPEGpy import peg  # pip install pPEGpy
+# import pPEGpy as peg  # for Parse, Code, run
 
 
 # == unit tests for run function =============================================
@@ -6,12 +7,12 @@ from pPEGpy import Parse, Code, run
 
 def test_run(expr, input, end, expect=True):
     test_ptree = ["peg", [["rule", [["id", "s"], expr]]]]
-    code = Code(None, boot=test_ptree)  # boot_compile(test_ptree)
+    code = peg.Code(None, __boot__=test_ptree)  # boot_compile(test_ptree)
     if code.err:
         print(f"*** test failed to compile: {test_ptree}\n{code.err}")
         return
-    parse = Parse(code, input)
-    result = run(parse, ["id", 0])  # , EQ])
+    parse = peg.Parse(code, input)
+    result = peg.run(parse, ["id", 0])  # , EQ])
     failed = (expect and not result) or (not expect and result)
     if failed or parse.pos != end:
         print(f'*** test failed: {expr} "{input}" pos: {parse.pos} expected: {end}')

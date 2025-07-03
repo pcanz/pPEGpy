@@ -27,10 +27,22 @@
 # - revise error report
 # - remove trans method
 # - add transform fn arity, 1 fn(val) or 3 fn(p,i,val)
+# pPEGpy-21.py  2025-07-01 => PyPi 0.3.14
+# - move all extensions external -- extras.py
+# - parse start=i option, no error for a prefix match
+# - empty leaf => trace.pop()
+# - dump ignore DROP flag, no filter
+# - print trace before error report
 
 
 # TODO
-# - add a <match rule> or <parse x y>  to enable palindrome grammar
+# - add a <fork x y>  to enable palindrome grammar
+# - p.print(debug|trace|err)
+# - binary (not Unicode)  <binary>  and/or  compile(..., ASCII=True)??
+
+# - Muon
+# - Opex
+# - pPEGpy repo: examples, tests, ...
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
@@ -71,19 +83,22 @@ ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
-DROP = 4  # -    cancel flag
-FAIL = 8  # !    fail flag
+# flags
+
+LINK = 4  # @  fork sub-tree
+DROP = 8  # -    cancel flag
+FAIL = 16  # !    fail flag
 
 # -- Parse context for parser run function -----------------------------------
 
 
 class Parse:
-    def __init__(self, code: Code, input: str, **opt):
+    def __init__(self, code: Code, input: str, start=-1, end=-1, **opt):
         self.ok = True
         self.code = code
         self.input = input
-        self.pos = 0
-        self.end = opt.get("end", len(input))
+        self.pos = 0 if start < 0 else start
+        self.end = len(input) if end < 0 else end  # opt.get("end", len(input))
 
         # tree node: [start, end, id, depth]
         self.state = []  # trace [defn, fault]
@@ -116,73 +131,86 @@ class Parse:
 
     # -- parse tree methods ---------------------------
 
-    def id(self, i):  # [start, end, id, depth]
-        if self.tree is None:
+    def id(self, i, trace=False):  # [start, end, id, depth]
+        if trace or self.tree is None:
             return self.trace[i][2]
         return self.tree[i][2]
 
-    def name(self, i):  # parse tree node name
-        return self.code.names[self.id(i)]
+    def name(self, i, trace=False):  # parse tree node name
+        return self.code.names[self.id(i, trace)]
 
-    def span(self, i):  # [start, end, id, depth]
-        if self.tree is None:
+    def span(self, i, trace=False):  # [start, end, id, depth]
+        if trace or self.tree is None:
             return (self.trace[i][0], self.trace[i][1])
         return (self.tree[i][0], self.tree[i][1])
 
-    def text(self, i):  # parse tree node matched text
-        start, end = self.span(i)
+    def text(self, i, trace=False):  # parse tree node matched text
+        start, end = self.span(i, trace)
         return self.input[start:end]
 
-    def depth(self, i):  # [start, end, id, depth]
-        if self.tree is None:
+    def size(self, trace=False):
+        if trace or self.tree is None:
+            return len(self.trace)
+        return len(self.tree)
+
+    def depth(self, i, trace=False):  # [start, end, id, depth]
+        if trace or self.tree is None:
             return self.trace[i][3]
         return self.tree[i][3]  # depth of node in parse tree
 
-    def leaf(self, i):  # is a terminal node?
-        if self.tree is None:
+    def leaf(self, i, trace=False):  # is a terminal node?
+        if trace or self.tree is None:
             return self.state[i] == TERM
         if i + 1 < len(self.tree) and self.depth(i + 1) > self.depth(i):
             return False
         return True
 
-    def next(self, i):  # next node in parse tree
+    def next(self, i, trace=False):  # next node in parse tree
         nodes = self.tree
-        if nodes is None:
+        if trace or nodes is None:
             nodes = self.trace
         d = self.depth(i)
         while i < len(nodes) - 1 and self.depth(i + 1) > d:
             i += 1
         return i + 1  # next node at same depth or deeper
 
-    def fault(self, i):  # failed node: FAIL|DROP
-        if self.tree is None:
-            return self.state[i][1]
+    def fault(self, i, trace=False):  # failed node: FAIL|DROP
+        if trace or self.tree is None:
+            return self.state[i][1] & (FAIL | DROP)
         return 0  # pruned self.tree has no failures
 
-    def defn(self, i):  # rule type EQ|HEAD|TERM|ANON
-        if self.tree is None:
+    def defn(self, i, trace=False):  # rule type EQ|HEAD|TERM|ANON
+        if trace or self.tree is None:
             return self.state[i][0]
         print("! prune_tree: defn called on pruned tree")
         return EQ  # pruned self.tree has no rule types
 
-    def ptree(self):
-        if self.tree is None:
+    def ptree(self, trace=False):
+        if trace or self.tree is None:
             return []  # no pruned tree
         ptree, _ = p_tree(self, 0, 0)
         if not ptree:
             return []
         return ptree[0]
 
-    def itree(self):
-        if self.tree is None:
+    def itree(self, trace=False):
+        if trace or self.tree is None:
             return []  # no pruned tree
         itree, _ = i_tree(self, 0, 0)
         if not itree:
             return []
         return itree[0]
 
-    def dump(self, filter=1):
-        return dump_tree(self, filter)
+    def dump(self, trace=True):
+        return dump_tree(self, trace)
+
+    def run(self, id):
+        return run(self, ["id", id])
+
+    def link(self, i):
+        self.index += 1
+        self.state.append([HEAD, LINK])
+        self.trace.append([self.pos, self.pos, i, self.deep])
 
     def transform(self, **fns):
         if self.tree is None:
@@ -195,18 +223,17 @@ class Parse:
 # -- the parser function itself -------------------
 
 
-def parser(code: Code, input: str, **opt) -> Parse:
-    parse = Parse(code, input, **opt)
+def parser(code: Code, input: str, start=-1, end=-1, **opt) -> Parse:
+    parse = Parse(code, input, start, end, **opt)
     if not code.ok:
         parse.ok = False
         return parse
     ok = run(parse, ["id", 0])
-    if ok and parse.pos < len(parse.input):
+    if ok and start == -1 and parse.pos < len(parse.input):
         parse.end_pos = parse.pos
         ok = False
     parse.ok = ok
-    debug = opt.get("debug")
-    if debug:
+    if debug := opt.get("debug"):
         parse.dump(debug)
     if parse.ok:
         prune_tree(parse)  # delete failures and redundant heads
@@ -254,9 +281,16 @@ def run(parse: Parse, expr: list) -> bool:
                     parse.first = index  # root of peak failure
 
             # parse trace:  [start, end, id, depth, defx] ---------------
-            parse.trace[index][1] = parse.pos  # end pos
-            if not ok:
-                parse.state[index][1] = FAIL
+            if ok:
+                parse.trace[index][1] = parse.pos
+            else:
+                if pos == parse.pos and parse.index == index + 1:
+                    parse.index -= 1
+                    parse.state.pop()
+                    parse.trace.pop()
+                else:
+                    parse.state[index][1] = FAIL
+                    parse.trace[index][1] = parse.pos
 
             parse.deep -= 1
             return ok
@@ -486,23 +520,18 @@ def show_tree(parse: Parse) -> str:
 # -- debug dump of parse tree nodes --------------------------------------------
 
 
-def dump_tree(parse: Parse, filter=1) -> None:
-    tree = parse.tree  # save tree if there is one
-    parse.tree = None  # hack to use trace regardless
+def dump_tree(parse: Parse, trace=True) -> None:
     print("Node  Span    Tree                                 Input...", end="")
     pos = 0  # to fill in any anon text matched between nodes
-    for i in range(0, len(parse.trace)):
-        name = parse.name(i)
-        fault = parse.fault(i)
-        start, end = parse.span(i)
-        depth = parse.depth(i)
-        if fault:
-            if filter == 2 and start == end:
-                continue
-            if fault & FAIL != 0:
-                name = "!" + name
-            else:  # DROP
-                name = "-" + name
+    for i in range(0, parse.size(trace)):
+        name = parse.name(i, trace)
+        fault = parse.fault(i, trace)
+        start, end = parse.span(i, trace)
+        depth = parse.depth(i, trace)
+        if fault & FAIL != 0:
+            name = "!" + name
+        # else:  # DROP
+        #     name = "-" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -522,12 +551,7 @@ def dump_tree(parse: Parse, filter=1) -> None:
     anon = ""
     if pos < parse.max_pos:  # final last node anon text...
         anon = f" -> {parse.input[pos : parse.max_pos]!r}"
-    print(anon)
-    if filter == 2:
-        print(
-            "Note: empty failures have been omitted (use parse.dump(1) to see everything)."
-        )
-    parse.tree = tree  # hack: restore tree, if there was one
+    print(anon + "\n")
 
 
 # -- Parse error reporting ---------------------------------------------------
@@ -613,13 +637,14 @@ def src_map(parse, name, note=""):
     return "\n".join(lines)
 
 
-def err_report(parse):
-    note = "... for more details use: parse.dump() ..."
-    at_pos = f"at: {max(parse.pos, parse.max_pos)} of: {parse.end}  {note}"
-    if parse.code and parse.code.err:
+def err_report(parse, trace=True):
+    at_pos = f"at: {max(parse.pos, parse.max_pos)} of: {parse.end}"
+    if parse.code.err:
         title = f"*** grammar failed {at_pos}"
         errs = "\n".join(parse.code.err)
         return f"{title}\n{errs}\n{show_pos(parse)}"
+    if trace:
+        parse.dump()
     title = f"*** parse failed {at_pos}"
     return f"""{title}\n{show_pos(parse, rule_info(parse))}"""
 
@@ -628,14 +653,14 @@ def err_report(parse):
 
 
 class Code:
-    def __init__(self, peg_parse, **opt):
+    def __init__(self, peg_parse, __boot__=None, **extras):
         self.peg_parse = peg_parse  # Parse of Peg grammar (None for boot)
-        self.ptree = peg_parse.ptree() if peg_parse else opt["boot"]
+        self.ptree = peg_parse.ptree() if peg_parse else __boot__
         self.names = []  # rule name
         self.rules = []  # rule body expr
         self.codes = []  # compiled expr
         self.defs = []  # rule type, defn symbol
-        self.extras = opt.get("extras", None)  # extension functions
+        self.extras = extras  # opt.get("extras", None)  # extension functions
         self.err = []
         self.ok = True
         self.compose()
@@ -654,8 +679,8 @@ class Code:
             lines.append(f"{i:2}: {rule} {DEFS[self.defs[i]]} {self.codes[i]}")
         return "\n".join(lines)
 
-    def parse(self, input, **opt):
-        return parser(self, input, **opt)
+    def parse(self, input, start=-1, end=-1, **opt):
+        return parser(self, input, start, end, **opt)
 
     def errors(self):
         return "\n".join(self.err)
@@ -753,17 +778,12 @@ def emit(code, expr):
 
 def extra_fn(code, extend):
     args = extend[1:-1].split()  # <command args...>
-    if code.extras:
-        fn = code.extras.get(args[0])
-        if fn:
-            return [fn, *args[1:]]
-    op, n = extra_fns.get(args[0], (None, 0))  # (fn, n) n = number of id args
+    extras = code.extras
+    op = extras.get(args[0], None)
     if op is None:
-        raise NameError(f"*** Undefined extension: {extend} ...")
-    op_args = [op]
-    for i in range(1, n + 1):
-        op_args.append(code.name_id(args[i]))
-    return op_args
+        code.err.append(f"*** Undefined extension: {extend} ...")
+        return ["err", f"*** Undefined extension: {extend} ..."]
+    return [op, args]
 
 
 # -- escape codes ----------------------
@@ -841,27 +861,31 @@ def transformer(p: Parse, i, d) -> tuple[list, int]:
 
 def apply(name, fn, p, i, args):
     result = None
-    arity = 1
+    arity = fn_arity(fn)
+    try:
+        if arity == 1:
+            result = fn(args)
+        elif arity == 3:
+            result = fn(p, i, args)
+        else:
+            note = "1: fn(value) or 3: fn(parse, index, value)"
+            raise SystemExit(
+                f"*** transform {name}={fn.__name__} has {arity=}, expected: {note} ..."
+            )
+    except Exception as err:
+        raise SystemExit(f"*** transform failed: {name}={fn.__name__}({args})\n{err}")
+    return result
+
+
+def fn_arity(fn) -> int:
     try:
         sig = inspect.signature(fn)
         arity = len(sig.parameters)
         if arity > 1 and str(sig).split(", ")[1] == "/":
             arity = 1
-        if arity == 2 or arity > 3:
-            note = "1: fn(value) or 3: fn(parse, index, value)"
-            raise SystemExit(
-                f"*** transform {name}={fn.__name__} has {arity=}, expected: {note} ..."
-            )
+        return arity
     except ValueError:
-        pass  # Python built-in? assume arity == 1
-    try:
-        if arity == 1:
-            result = fn(args)
-        else:
-            result = fn(p, i, args)
-    except Exception as err:
-        raise SystemExit(f"*** transform failed: {name}={fn.__name__}({args})\n{err}")
-    return result
+        return 1  # Python built-in? assume arity == 1
 
 
 # -- peg_grammar ptree -- bootstrap generated ---------------------------------------------------------
@@ -892,154 +916,17 @@ peg_ptree = ['Peg', [
 
 # == pPEG compile API =========================================================
 
-peg_code = Code(None, boot=peg_ptree)  # boot compile
+peg_code = Code(None, __boot__=peg_ptree)  # boot compile
 
 
-def compile(grammar, **fns) -> Code:
+def compile(grammar, **opt) -> Code:
     parse = parser(peg_code, grammar)
     if not parse.ok:
-        raise SystemExit("*** grammar fault...\n" + err_report(parse))
-    code = Code(parse, extras=fns)
+        raise SystemExit("*** grammar fault...\n" + err_report(parse, trace=False))
+    code = Code(parse, **opt)
     if not code.ok:
         raise SystemExit("*** grammar errors...\n" + code.errors())
     return code
 
 
 peg_code = compile(peg_grammar)  # to improve grammar error reporting
-
-
-# == extension functions ==============================================
-
-
-def dump_fn(parse):  # <dump>
-    parse.dump(1)
-    return True
-
-
-def eq_fn(parse, id1, id2):  # <eq x y>
-    x = None
-    y = None
-    n = len(parse.tree) - 1
-    while n >= 0:
-        if parse.fault(n) != 0:
-            n -= 1
-            continue
-        id = parse.id(n)
-        if x is None and id == id1:
-            x = n
-        if y is None and id == id2:
-            y = n
-        if x and y:
-            dx = parse.depth(x)
-            dy = parse.depth(y)
-            if x < y:
-                if dx <= dy:
-                    break
-                else:
-                    x = None  # try again
-            elif y < x:
-                if dy <= dx:
-                    break
-                else:
-                    y = None  # try again
-        n -= 1
-    if x is None or y is None:
-        return False  # TODO err no x or y found
-    if parse.text(x) == parse.text(y):
-        return True
-    return False
-
-
-def same_fn(parse, id):  # <same x>
-    pos = parse.pos
-    n = len(parse.tree) - 1
-    d = parse.deep  # depth(n)
-    hits = 0
-    while n >= 0:
-        k = parse.depth(n)
-        # <same name> may be in it's own rule, if so adjust it's depth....
-        if hits == 0 and k < d:
-            d -= 1
-            continue
-        if parse.id(n) == id:
-            hits += 1
-            start, end = parse.span(n)
-            if k > d or parse.fault(n) != 0 or end > pos:
-                n -= 1
-                continue
-            if pos + end - start > parse.end:
-                return False
-            for i in range(start, end):
-                if parse.input[i] != parse.input[pos]:
-                    return False
-                pos += 1
-            parse.pos = pos
-            return True
-        n -= 1
-    return hits == 0  # no prior to be matched
-
-
-# -- Python style indent, inset, dedent ----------------
-
-
-def inset_stack(parse):
-    stack = parse.extra_state.get("inset")
-    if stack is None:
-        stack = [""]
-        parse.extra_state["inset"] = stack
-    return stack
-
-
-def indent_fn(parse):
-    pos = parse.pos
-    while True:
-        if pos >= parse.end:
-            return False
-        char = parse.input[pos]
-        if not (char == " " or char == "\t"):
-            break
-        pos += 1
-    stack = inset_stack(parse)
-    inset = stack[-1]
-    if pos - parse.pos <= len(inset):
-        return False
-    new_inset = parse.input[parse.pos : pos]
-    for i, c in enumerate(inset):  # check same inset prefix
-        if inset[i] != new_inset[i]:
-            raise ValueError(
-                f"Bad <indent> {inset=!r} {new_inset=!r} at {pos} of {parse.end}"
-            )
-    stack.append(new_inset)
-    parse.pos = pos
-    return True
-
-
-def inset_fn(parse):
-    inset = inset_stack(parse)[-1]
-    pos = parse.pos
-    if pos + len(inset) >= parse.end:
-        return False
-    for x in inset:
-        if parse.input[pos] != x:
-            return False
-        pos += 1
-    parse.pos = pos
-    return True
-
-
-def dedent_fn(parse):
-    inset_stack(parse).pop()
-    return True
-
-
-# -- function map -------------------
-
-extra_fns = {  # => (fn, n) n = number of id args
-    "dump": (dump_fn, 0),
-    "undefined": (dump_fn, 0),
-    "same": (same_fn, 1),
-    "eq": (eq_fn, 2),
-    "indent": (indent_fn, 0),
-    "inset": (inset_fn, 0),
-    "dedent": (dedent_fn, 0),
-}

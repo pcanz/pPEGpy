@@ -1,5 +1,5 @@
-# from pPEGpy import peg
-import pPEGpy as peg
+from pPEGpy import peg  # pip install pPEGpy
+# import pPEGpy as peg  # use local file
 
 # == grammar testing =============================
 
@@ -51,13 +51,14 @@ tests = [
     ('', ['s', '']),
     ]],
     [""" # 5: check fall back nodes have been marked as failed ...
-    s = t x*
+    s = t y*
     t = (x x)*
     x = [a-z]
+    y = [a-z]
     """,[
-    ('a', ['s',[['t',''],['x','a']]]),
+    ('a', ['s',[['t',''],['y','a']]]),
     ('ab', ['t',[['x','a'],['x','b']]]),
-    ('abc', ['s',[['t',[['x','a'],['x','b']]],['x','c']]]),
+    ('abc', ['s',[['t',[['x','a'],['x','b']]],['y','c']]]),
     ('abcd', ['t',[['x','a'],['x','b'],['x','c'],['x','d']]]),
     ]],
     [""" # 6: check rule types, elide redundant...
@@ -129,7 +130,7 @@ def run_tests():
             input, tree = example
             p = code.parse(input)
             if p.ok:
-                if verify(t, e, p.tree(), tree):
+                if verify(t, e, p.ptree(), tree):
                     ok += 1
                 else:
                     fail += 1
