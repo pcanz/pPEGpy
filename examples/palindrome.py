@@ -74,30 +74,26 @@ p = code.parse(R"```a``y``z```", debug=1)
 # p.dump(0)
 print(p)
 
+
 print("=====================")
 
 pal = peg.compile(
     """
-    p  = x1 p1 x2 / x1?
-    p1 = <fork p m>
-    m  = (x &x)*
+    p  = x1 m x2 / x1?
+    m  = (x &x)*  #  m => p 
     x1 = x
     x2 = <same x1>
     x  : [a-z]
     """,
-    **extensions,
+    same=extras.same,
 )
 
 
-def palon(s):
+def palindrome(s):
     t = pal.parse(s)
-    return t.transform(p1=p1)
+    return t.transform(m=palindrome)
 
 
-def p1(args):
-    return palon(args[1][1])
-
-
-x = palon("racecar")
+x = palindrome("racecar")
 
 print(x)

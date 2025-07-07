@@ -33,11 +33,15 @@
 # - empty leaf => trace.pop()
 # - dump ignore DROP flag, no filter
 # - print trace before error report
+# pPEGpy-22.py  2025-07-04 => PyPi 0.3.15
+# - seq fall-back only DROP siblings (FAULT=FAIL|DROP covers children)
+# - dump shows DROP flag (if not FAIL)
+# + parse.empty_alt TODO better err_report
+# - fix err_report when FIRST >= len(trace) (empty node fail at end)
 
 
 # TODO
-# - add a <fork x y>  to enable palindrome grammar
-# - p.print(debug|trace|err)
+# - source code map
 # - binary (not Unicode)  <binary>  and/or  compile(..., ASCII=True)??
 
 # - Muon
@@ -85,7 +89,6 @@ TERM = 3  # =:   terminal leaf node text match
 
 # flags
 
-LINK = 4  # @  fork sub-tree
 DROP = 8  # -    cancel flag
 FAIL = 16  # !    fail flag
 
@@ -107,6 +110,7 @@ class Parse:
 
         # run state...
         self.anon = False  # True when running anon rules
+        self.rule = 0
         self.deep = 0  # tree depth, deep to avoid name conflict with self.depth()
         self.max_depth = 255  # catch left recursion
 
@@ -116,6 +120,8 @@ class Parse:
         self.first = -1  # node at max pos failure
         self.top = -1  # parent of first node
         self.end_pos = -1  # fell short end pos
+        self.empty_alt = None  # (alt, index)
+        self.debug = []
 
         # transform map...
         self.transforms = None  # for parse.transform(...)
@@ -207,11 +213,6 @@ class Parse:
     def run(self, id):
         return run(self, ["id", id])
 
-    def link(self, i):
-        self.index += 1
-        self.state.append([HEAD, LINK])
-        self.trace.append([self.pos, self.pos, i, self.deep])
-
     def transform(self, **fns):
         if self.tree is None:
             return []  # no pruned tree
@@ -257,6 +258,7 @@ def run(parse: Parse, expr: list) -> bool:
                 return ok
 
             # all other ids.............
+            parse.rule = idx
             pos = parse.pos
             depth = parse.deep
             parse.deep += 1
@@ -298,8 +300,10 @@ def run(parse: Parse, expr: list) -> bool:
         case ["alt", list]:
             pos = parse.pos
             max = pos
-            for x in list:
+            for i, x in enumerate(list):
                 if run(parse, x):
+                    if pos == parse.pos and i != len(list) - 1:  # for err report
+                        parse.empty_alt = (list, i)
                     return True
                 if parse.pos > pos:
                     max = parse.pos
@@ -309,10 +313,12 @@ def run(parse: Parse, expr: list) -> bool:
 
         case ["seq", list]:
             index = parse.index
+            depth = parse.deep
             for i, x in enumerate(list):
                 if not run(parse, x):
                     while index < parse.index:  # parse tree fall-back
-                        parse.state[index][1] |= DROP
+                        if parse.trace[index][3] == depth:
+                            parse.state[index][1] |= DROP
                         index += 1
                     return False
             return True
@@ -530,8 +536,8 @@ def dump_tree(parse: Parse, trace=True) -> None:
         depth = parse.depth(i, trace)
         if fault & FAIL != 0:
             name = "!" + name
-        # else:  # DROP
-        #     name = "-" + name
+        elif fault & DROP != 0:
+            name = "-" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -548,9 +554,13 @@ def dump_tree(parse: Parse, trace=True) -> None:
         text = f"{parse.input[start:end]!r}{etc}"
         print(f"{report:65} {text}", end="")
         # next loop: print(anon) to append -> text at end of this line
-    anon = ""
-    if pos < parse.max_pos:  # final last node anon text...
+    anon = ""  # final last node anon text...
+    if pos < parse.max_pos:
         anon = f" -> {parse.input[pos : parse.max_pos]!r}"
+        pos = parse.max_pos
+    anon += f" <> {parse.input[pos:]!r}"
+    if len(anon) > 80:
+        anon = anon[0:50] + "..."
     print(anon + "\n")
 
 
@@ -569,7 +579,7 @@ def show_pos(parse, info=""):
         prior = f"line {ln - 1} | {parse.input[sol1 + 1 : sol]}\n"
     if pos == parse.end:
         return f"{prior}{left}\n{' ' * len(left)}^ {info}"
-    return f"{prior}{left}{parse.input[pos]}{parse.input[pos + 1 : eol]}\n{' ' * len(left)}^ {info}"
+    return f"{prior}{left}{parse.input[pos:eol]}\n{' ' * len(left)}^ {info}"
 
 
 def line_start(parse, sol):
@@ -613,7 +623,9 @@ def rule_info(parse):
     if top > first:  # and parse.end_pos > -1:
         return "unexpected ending"
     target = first
-    name = parse.name(target)
+    if target >= len(parse.trace):
+        target = top
+    name = parse.name(target, trace=True)
     start, end = parse.span(target)
     if start == end:
         note = " expected"
@@ -628,13 +640,24 @@ def src_map(parse, name, note=""):
         return name + note + " in boot-code..."
     lines = [name + note]
     # show grammar rule....
-    for i in range(0, len(peg_parse.tree)):
+    for i in range(0, len(peg_parse.tree) - 1):
         if peg_parse.name(i) != "rule":
             continue
-        if peg_parse.text(i + 1) != name:
-            continue
-        lines.append(f"{peg_parse.text(i).strip()}")
+        if peg_parse.text(i + 1) == name:
+            lines.append(f"{peg_parse.text(i).strip()}")
+            break
     return "\n".join(lines)
+
+
+def empty_alt_report(parse):
+    if parse.empty_alt is None:
+        return ""
+    list, i = parse.empty_alt
+    opt = list[i]
+    msg = f"\n*** in: {list}"
+    if opt[0] == "id":
+        return f"{msg}\n    alternative '{parse.name(opt[1], trace=True)}' was an empty '' match!"
+    return f"{msg}\n    alternative {i} was an empty '' match!"
 
 
 def err_report(parse, trace=True):
@@ -645,7 +668,7 @@ def err_report(parse, trace=True):
         return f"{title}\n{errs}\n{show_pos(parse)}"
     if trace:
         parse.dump()
-    title = f"*** parse failed {at_pos}"
+    title = f"*** parse failed {at_pos}" + empty_alt_report(parse)
     return f"""{title}\n{show_pos(parse, rule_info(parse))}"""
 
 

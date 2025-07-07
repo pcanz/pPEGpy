@@ -72,13 +72,6 @@ def same(parse, args):  # <same x>
     return hits == 0  # no prior to be matched
 
 
-def fork(parse, args):  # <fork x y>
-    x = parse.code.name_id(args[1])
-    parse.link(x)  # link node for x
-    y = parse.code.name_id(args[2])
-    return parse.run(y)
-
-
 # -- Python style indent, inset, dedent ----------------
 
 
@@ -140,7 +133,6 @@ def extensions():
         "dump": dump,
         "undefined": dump,
         "same": same,
-        "fork": fork,
         "eq": eq,
         "indent": indent,
         "inset": inset,
