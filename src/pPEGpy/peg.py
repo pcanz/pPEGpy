@@ -38,6 +38,8 @@
 # - dump shows DROP flag (if not FAIL)
 # + parse.empty_alt TODO better err_report
 # - fix err_report when FIRST >= len(trace) (empty node fail at end)
+# pPEGpy-23.py  2025-07-07 => PyPi 0.3.16
+# - simplify state to flags, use p.code.defs for defx
 
 
 # TODO
@@ -78,7 +80,7 @@ extn  = '<' ~'>'* '>'
 _     = ([ \t\n\r]+ / '#' ~[\n\r]*)*
 """
 
-# -- rule types ------------------------------------------------------------------
+# -- rule types ------------------------------------------------------------
 
 DEFS = ["=", ":", ":=", "=:"]
 
@@ -87,12 +89,14 @@ ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
 
-# flags
+# -- parse state flags -----------------------------------------------------
 
+OK = 0  # all clear
+INIT = 1  # id call entered
 DROP = 8  # -    cancel flag
 FAIL = 16  # !    fail flag
 
-# -- Parse context for parser run function -----------------------------------
+# -- Parse context for parser run function ----------------------------------
 
 
 class Parse:
@@ -104,7 +108,7 @@ class Parse:
         self.end = len(input) if end < 0 else end  # opt.get("end", len(input))
 
         # tree node: [start, end, id, depth]
-        self.state = []  # trace [defn, fault]
+        self.state = []  # trace state bit flags: OK|INIT|DROP|FAIL
         self.trace = []  # trace nodes retained for debug and error reporting
         self.tree = None  # tree is trace pruned of failed and redundant nodes
 
@@ -145,6 +149,9 @@ class Parse:
     def name(self, i, trace=False):  # parse tree node name
         return self.code.names[self.id(i, trace)]
 
+    def defx(self, i, trace=False):  # rule defx: EQ|ANON|HEAD|TERM
+        return self.code.defs[self.id(i, trace)]
+
     def span(self, i, trace=False):  # [start, end, id, depth]
         if trace or self.tree is None:
             return (self.trace[i][0], self.trace[i][1])
@@ -180,16 +187,17 @@ class Parse:
             i += 1
         return i + 1  # next node at same depth or deeper
 
-    def fault(self, i, trace=False):  # failed node: FAIL|DROP
+    def status(self, i, trace=True):  # trace state flags OK|INIT|DROP|FAIL
         if trace or self.tree is None:
-            return self.state[i][1] & (FAIL | DROP)
-        return 0  # pruned self.tree has no failures
+            return self.state[i]
+        print(f"! status {trace=} called on pruned tree")
+        return OK  # pruned self.tree has no state
 
-    def defn(self, i, trace=False):  # rule type EQ|HEAD|TERM|ANON
+    def fault(self, i, trace=True):  # trace state flags OK|INIT|DROP|FAIL
         if trace or self.tree is None:
-            return self.state[i][0]
-        print("! prune_tree: defn called on pruned tree")
-        return EQ  # pruned self.tree has no rule types
+            return self.state[i] != OK
+        print("! fault called on pruned tree")
+        return FAIL  # pruned self.tree has no state
 
     def ptree(self, trace=False):
         if trace or self.tree is None:
@@ -207,8 +215,8 @@ class Parse:
             return []
         return itree[0]
 
-    def dump(self, trace=True):
-        return dump_tree(self, trace)
+    def dump(self):
+        return dump_tree(self, trace=True)
 
     def run(self, id):
         return run(self, ["id", id])
@@ -234,8 +242,8 @@ def parser(code: Code, input: str, start=-1, end=-1, **opt) -> Parse:
         parse.end_pos = parse.pos
         ok = False
     parse.ok = ok
-    if debug := opt.get("debug"):
-        parse.dump(debug)
+    if opt.get("debug"):
+        parse.dump()
     if parse.ok:
         prune_tree(parse)  # delete failures and redundant heads
     return parse
@@ -268,7 +276,7 @@ def run(parse: Parse, expr: list) -> bool:
             # parse tree array - enter node ------------
             index = parse.index  # this node == len(parse.nodes)
             parse.index += 1
-            parse.state.append([defx, 0])
+            parse.state.append(INIT)
             parse.trace.append([pos, 0, idx, depth])
 
             # -- run -----------------------
@@ -276,23 +284,18 @@ def run(parse: Parse, expr: list) -> bool:
             ok = run(parse, rule)  # ok = True | False
             # ------------------------------
 
-            if not ok and parse.pos >= parse.max_pos:
-                parse.top = index  # parent of peak failure
-                if parse.pos > parse.max_pos:
-                    parse.max_pos = parse.pos
-                    parse.first = index  # root of peak failure
+            # -- parse trace:  [start, end, id, depth, defx] ----------
+            parse.trace[index][1] = parse.pos
 
-            # parse trace:  [start, end, id, depth, defx] ---------------
             if ok:
-                parse.trace[index][1] = parse.pos
+                parse.state[index] = OK
             else:
-                if pos == parse.pos and parse.index == index + 1:
-                    parse.index -= 1
-                    parse.state.pop()
-                    parse.trace.pop()
-                else:
-                    parse.state[index][1] = FAIL
-                    parse.trace[index][1] = parse.pos
+                parse.state[index] = FAIL
+                if parse.pos >= parse.max_pos:
+                    parse.top = index  # parent of peak failure
+                    if parse.pos > parse.max_pos:
+                        parse.max_pos = parse.pos
+                        parse.first = index  # root of peak failure
 
             parse.deep -= 1
             return ok
@@ -318,7 +321,7 @@ def run(parse: Parse, expr: list) -> bool:
                 if not run(parse, x):
                     while index < parse.index:  # parse tree fall-back
                         if parse.trace[index][3] == depth:
-                            parse.state[index][1] |= DROP
+                            parse.state[index] = DROP
                         index += 1
                     return False
             return True
@@ -355,7 +358,7 @@ def run(parse: Parse, expr: list) -> bool:
             result = run(parse, term)
             parse.pos = pos  # reset
             while index < parse.index:  # parse tree fall-back
-                parse.state[index][1] |= DROP
+                parse.state[index] = DROP
                 index += 1
             if op == "!":
                 return not result
@@ -369,7 +372,7 @@ def run(parse: Parse, expr: list) -> bool:
             result = run(parse, term)
             parse.pos = pos  # reset
             while index < parse.index:  # parse tree fall-back
-                parse.state[index][1] |= DROP
+                parse.state[index] = DROP
                 index += 1
             if result:
                 return False
@@ -438,13 +441,13 @@ def prune(p, i, d, n, tree):  #  -> i,  builds tree from trace
     # read from i: with depth: dep  ==>  append to tree with depth: dep-n
     j = len(p.trace)
     while i < j and (dep := p.depth(i)) >= d:
-        if p.fault(i) != 0:
+        if p.fault(i):
             i += 1
             while i < len(p.trace) and p.depth(i) > dep:
                 i += 1  # skip over any children...
             continue
         count = child_count(p, i + 1, dep + 1)
-        if count == 1 and p.defn(i) != HEAD:  # single child => redundant node
+        if count == 1 and p.defx(i) != HEAD:  # single child => redundant node
             i = prune(p, i + 1, dep + 1, n + 1, tree)
             continue
         start, end, idx, _ = p.trace[i]  # adjust depth for deleted nodes
@@ -461,7 +464,7 @@ def child_count(p, i, d):
         if dep < d:  # no more children at this depth
             break
         if dep == d:
-            if p.fault(i) != 0:
+            if p.fault(i):
                 i += 1
                 while i < j and p.depth(i) > dep:
                     i += 1
@@ -529,15 +532,17 @@ def show_tree(parse: Parse) -> str:
 def dump_tree(parse: Parse, trace=True) -> None:
     print("Node  Span    Tree                                 Input...", end="")
     pos = 0  # to fill in any anon text matched between nodes
-    for i in range(0, parse.size(trace)):
+    for i in range(0, parse.size()):
         name = parse.name(i, trace)
-        fault = parse.fault(i, trace)
+        state = parse.status(i, trace) if trace else OK  # dump tree
         start, end = parse.span(i, trace)
         depth = parse.depth(i, trace)
-        if fault & FAIL != 0:
+        if state & FAIL != 0:
             name = "!" + name
-        elif fault & DROP != 0:
+        elif state & DROP != 0:
             name = "-" + name
+        elif state != OK:  # should not happen
+            name = "?" + name
         anon = ""
         if pos < start:
             anon = f" -> {parse.input[pos:start]!r}"
@@ -682,7 +687,7 @@ class Code:
         self.names = []  # rule name
         self.rules = []  # rule body expr
         self.codes = []  # compiled expr
-        self.defs = []  # rule type, defn symbol
+        self.defs = []  # rule defn -> defx: EQ|ANON|HEAD|TERM
         self.extras = extras  # opt.get("extras", None)  # extension functions
         self.err = []
         self.ok = True
@@ -744,7 +749,7 @@ def code_rule_defs(code, name, defn, expr):
     try:
         defx = DEFS.index(defn)
     except ValueError:
-        defx = FAIL
+        defx = EQ
         code.err.append(f"undefined: {name} {defn} ...")
     if defx == EQ:
         if name[0] == "_":
