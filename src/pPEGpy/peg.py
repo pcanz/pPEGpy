@@ -40,14 +40,15 @@
 # - fix err_report when FIRST >= len(trace) (empty node fail at end)
 # pPEGpy-23.py  2025-07-07 => PyPi 0.3.16
 # - simplify state to flags, use p.code.defs for defx
-
+# pPEGpy-24.py  2025-07-16 => PyPi 0.3.17
+# - fix DROP to OR with FAIL
+# - add first_depth and top_count to improve err report
+# - add trim=True to dump() to elide failed nodes that are empty
 
 # TODO
 # - source code map
 # - binary (not Unicode)  <binary>  and/or  compile(..., ASCII=True)??
 
-# - Muon
-# - Opex
 # - pPEGpy repo: examples, tests, ...
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
@@ -123,6 +124,10 @@ class Parse:
         self.max_pos = -1  # peak fail
         self.first = -1  # node at max pos failure
         self.top = -1  # parent of first node
+
+        self.first_depth = 0
+        self.top_count = 0
+
         self.end_pos = -1  # fell short end pos
         self.empty_alt = None  # (alt, index)
         self.debug = []
@@ -293,9 +298,13 @@ def run(parse: Parse, expr: list) -> bool:
                 parse.state[index] = FAIL
                 if parse.pos >= parse.max_pos:
                     parse.top = index  # parent of peak failure
+                    if parse.trace[index][3] == parse.first_depth:
+                        parse.top_count += 1
                     if parse.pos > parse.max_pos:
                         parse.max_pos = parse.pos
+                        parse.top_count = 0
                         parse.first = index  # root of peak failure
+                        parse.first_depth = parse.trace[index][3]
 
             parse.deep -= 1
             return ok
@@ -321,7 +330,7 @@ def run(parse: Parse, expr: list) -> bool:
                 if not run(parse, x):
                     while index < parse.index:  # parse tree fall-back
                         if parse.trace[index][3] == depth:
-                            parse.state[index] = DROP
+                            parse.state[index] |= DROP
                         index += 1
                     return False
             return True
@@ -358,7 +367,7 @@ def run(parse: Parse, expr: list) -> bool:
             result = run(parse, term)
             parse.pos = pos  # reset
             while index < parse.index:  # parse tree fall-back
-                parse.state[index] = DROP
+                parse.state[index] |= DROP
                 index += 1
             if op == "!":
                 return not result
@@ -372,7 +381,7 @@ def run(parse: Parse, expr: list) -> bool:
             result = run(parse, term)
             parse.pos = pos  # reset
             while index < parse.index:  # parse tree fall-back
-                parse.state[index] = DROP
+                parse.state[index] |= DROP
                 index += 1
             if result:
                 return False
@@ -443,7 +452,7 @@ def prune(p, i, d, n, tree):  #  -> i,  builds tree from trace
     while i < j and (dep := p.depth(i)) >= d:
         if p.fault(i):
             i += 1
-            while i < len(p.trace) and p.depth(i) > dep:
+            while i < j and p.depth(i) > dep:
                 i += 1  # skip over any children...
             continue
         count = child_count(p, i + 1, dep + 1)
@@ -529,7 +538,7 @@ def show_tree(parse: Parse) -> str:
 # -- debug dump of parse tree nodes --------------------------------------------
 
 
-def dump_tree(parse: Parse, trace=True) -> None:
+def dump_tree(parse: Parse, trace=True, trim=True) -> None:
     print("Node  Span    Tree                                 Input...", end="")
     pos = 0  # to fill in any anon text matched between nodes
     for i in range(0, parse.size()):
@@ -538,6 +547,8 @@ def dump_tree(parse: Parse, trace=True) -> None:
         start, end = parse.span(i, trace)
         depth = parse.depth(i, trace)
         if state & FAIL != 0:
+            if trim and start == end:
+                continue
             name = "!" + name
         elif state & DROP != 0:
             name = "-" + name
@@ -625,11 +636,13 @@ def rule_info(parse):
         return "unexpected input, parse ok on input before this"
     first = parse.first  # > peak failure
     top = parse.top  # >= root failure
-    if top > first:  # and parse.end_pos > -1:
+    if top > first:
         return "unexpected ending"
     target = first
-    if target >= len(parse.trace):
-        target = top
+    if parse.top_count > 0 and parse.first_depth > 0:
+        target -= 1  # find parent of alt fails at same depth
+        while parse.depth(target) >= parse.first_depth:
+            target -= 1
     name = parse.name(target, trace=True)
     start, end = parse.span(target)
     if start == end:
