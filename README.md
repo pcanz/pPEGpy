@@ -160,6 +160,26 @@ import peg
 ```
 To avoid that (at the cost of all the Python packaging complications!) you can build a package `pPEGpy` and install it with pip, as above.
 
+## Release Notes version 3.18
+
+ - transforms in now in peg.compile(..), and not parse.transform(..) as before
+ - Transforms use `{'x': fx, 'y:': fy, ...}`
+ - parse.tree always constructed (pruned with faults ignored)
+ 
+ - PEGpy-29.py 2026-05-29 from fossil/mycode/
+ 
+  
+
+ ### TODO
+ 
+ - extras.py need to be re-written to use trace directly
+  - add extras, and transforms API
+ 
+ ### Future plans
+ 
+- source code map
+- binary (not Unicode)  <binary>  and/or  compile(..., ASCII=True)??
+ 
 
 ---
 

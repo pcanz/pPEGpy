@@ -1,31 +1,5 @@
 # pPEGpy -- run with Python 3.10+
 
-# pPEGpy-27.py 2026-04-15 (copy of pPEGpy-26.py without PyPi update)
-# - delete itree
-# - simplify fault reporting: e.g. max_pos, and seq expecting...
-# - fix empty HEAD to be ['T', []], not ['T', '']] in leaf for ptree()
-
-# pPEGpy-28.py 2026-04-30 (copy of pPEGpy-26.py without PyPi update)
-# - fix identify rule node at max pos ignoring initial empty fails
-# - fix ensure correct expected from max_seq by ckk on max_pos
-# - fix transform list results
-
-# - transforms in code (not parse). {'x':fn, 'y:':fn, ...}
-# - parse.tree always constructed (pruned with faults ignored)
-
-# pPEGpy-30.py 2026-05-29 (from fossil/mycode/)
-
-# plan:
-# - extras.py needs to be re-written to use trace directly
-# - add extras, and transforms API
-# - maybe: distinguish <xyz> transforms from extensions with rule:type PEG syntax?
-
-# TODO
-# - source code map
-# - binary (not Unicode)  <binary>  and/or  compile(..., ASCII=True)??
-# - pPEGpy repo: examples, tests, ...
-#   - need a script to: test, build, and publish
-
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
 import inspect  # for transform method to check fn arity
