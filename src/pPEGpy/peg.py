@@ -2,8 +2,6 @@
 
 from __future__ import annotations  # parser() has a forward ref to Code as type
 
-import inspect  # for transform method to check fn arity
-
 from dataclasses import dataclass  # for parse tree Node
 
 # -- pPEG grammar ------------------------------------------------------------
