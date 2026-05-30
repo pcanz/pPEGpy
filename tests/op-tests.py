@@ -7,7 +7,7 @@ from pPEGpy import peg  # pip install pPEGpy
 
 def test_run(expr, input, end, expect=True):
     test_ptree = ["peg", [["rule", [["id", "s"], expr]]]]
-    code = peg.Code(None, __boot__=test_ptree)  # boot_compile(test_ptree)
+    code = peg.Code(None, boot=test_ptree)  # boot_compile(test_ptree)
     if code.err:
         print(f"*** test failed to compile: {test_ptree}\n{code.err}")
         return

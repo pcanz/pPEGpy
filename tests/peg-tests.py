@@ -1,7 +1,7 @@
-import pPEGpy as peg
+from pPEGpy import peg  # pip install pPEGpy
+# import pPEGpy as peg  # local file
 
 print(f"peg imported from: {peg.__file__}")
-
 compile = peg.compile  # this is the only use of peg
 
 # == grammar testing =============================
