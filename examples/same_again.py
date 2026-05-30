@@ -1,6 +1,8 @@
 # import pPEGpy as peg  # local file
 from pPEGpy import peg  # pip install pPEGpy
 
+ # NOTE:  <extras> not yet updated for new version of pPEGpy
+
 import extras  # local file
 
 # Context Sensitive Grammars

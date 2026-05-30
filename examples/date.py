@@ -1,51 +1,44 @@
-from pPEGpy import peg
-# import pPEGpy as peg
+import pPEGpy as peg
 
-print("First a simple date grammar -------------------------------------\n")
-print("-  rules only uses sequence, or choice, with quoted literal match")
+print(f"peg imported from: {peg.__file__}")
 
-date_grammar = """
-    Date  = year '-' month '-' day
-    year  = d d d d
-    month = d d 
-    day   = d d
-    d     = '0'/'1'/'2'/'3'/'4'/'5'/'6'/'7'/'8'/'9'
-"""
-print(date_grammar)
-
-date = peg.compile(date_grammar)
-p = date.parse("2021-04-05")
-print(p)
-
-print("\nTwo small changes to the digit d rule ----------------------------\n")
-print("-  now uses the shorthand [0-9] for the choice of digit")
-print("-  define the rule with a colon to make the 'd' rule anonymous")
-
-
-date_grammar = """
-    Date  = year '-' month '-' day
-    year  = d d d d
-    month = d d 
-    day   = d d
-    d     : [0-9]
-"""
-print(date_grammar)
-
-date = peg.compile(date_grammar)
-p = date.parse("2021-04-05")
-print(p)
-
-print("\nNow a variation using * numeric repeat ------------------------\n")
-print("-  same parse tree, but no need for an anonymous rule")
-
-date_grammar = """
-    Date  = year '-' month '-' day
+date = peg.compile("""
+    date  = year '-' month '-' day
     year  = [0-9]*4
-    month = [0-9]*2 
+    month = [0-9]*2
     day   = [0-9]*2
-"""
-print(date_grammar)
+    """,
+    transforms = {
+    'date':dict, 'year:':int, 'month:':int, 'day:':int
+    }
+)
 
-date = peg.compile(date_grammar)
-p = date.parse("2021-04-05")
-print(p)
+ok, x = date.read('2026-02-03')
+
+print(x) # => {'year': 2026, 'month': 2, 'day': 3}
+
+# -- datetime example ---------------------
+
+import datetime as dt
+
+date = peg.compile(
+    "date  = [0-9]*4 '-' [0-9]*2 '-' [0-9]*2",
+    transforms = {'date': dt.date.fromisoformat}
+)
+
+ok, data = date.read("2026-03-04") 
+
+if ok: print(data)  # => 2026-03-04
+
+# -- parse tree with errors -----------------------
+
+p = date.parse('2026-03-0x04x')
+
+print('parse result:\n', p)
+print('trace....')
+p.print_trace()
+print('tree....')
+p.print_tree()
+
+
+

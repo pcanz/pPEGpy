@@ -1,5 +1,7 @@
-# == extension functions ==============================================
+# NOTE:  <extras> not yet updated for new version of pPEGpy
 
+
+# == extension functions ==============================================
 
 def dump(parse):  # <dump>
     parse.dump(1)

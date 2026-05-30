@@ -6,113 +6,123 @@ For documentation see [pPEG], the portable PEG project.
 
 The `pPEGpy` package can be installed from PyPi with:
 ```
-> pip install pPEGpy
+> pip install pPEGpy                  # version 3.18+
 ```
 Note the spelling of `pPEGpy`, there are unrelated packages with similar names. 
 
 For other ways to use the `pPEGpy` grammar-parser see the Package Notes below.
 
-##  Example
+##  Examples
 
 ``` python
-from pPEGpy import peg
+import pPEGpy as peg
 
-sexp = peg.compile("""
-    sexp  = _ list
-    list  = '(' _ elem* ')' _
-    elem  = list / atom _
-    atom  = ~[() \t\n\r]+
+print("Hello world!")
+
+greet = peg.compile("""
+    greet = _ hail _ whom _
+    hail  = 'Hello' / 'Hi'
+    whom  = 'you' / 'world!'
     _     = [ \t\n\r]*
-""")
+    """,
+    transforms = {"greet": dict}
+)
 
-test = """
-    (foo bar (blat 42) (f(g(x))))
-"""
+ok, words = greet.read("Hello world!")
 
-p = sexp.parse(test)
+print(words) # => {'hail': 'Hello', 'whom': 'world!'}
+```
+Run this example, then edit to see what works or fails.
 
-print(p)
-```
-This prints a parse tree diagram:
-```
-list
-│ atom 'foo'
-│ atom 'bar'
-│ list
-│ │ atom 'blat'
-│ │ atom '42'
-│ list
-│ │ atom 'f'
-│ │ list
-│ │ │ atom 'g'
-│ │ │ atom 'x'
-```
-Application can use a `ptree`:
-```
-ptree = p.ptree()
-
-print(ptree)  # =>
-
-["list",[["atom","foo"],["atom","bar"],
-    ["list",[["atom","blat"],["atom","42"]]],
-    ["list",[["atom","f"],
-        ["list",[["atom","g"],["atom","x"]]]]]]]
-```
-Another example:
+Comment out the transforms on line 11 to see the parse tree printed out as JSON.
 
 ``` python
 from pPEGpy import peg
 
-# Equivalent to the regular expression for well-formed URI's in RFC 3986.
+# Equivalent to the regular expression for
+# well-formed URI's in RFC 3986.
 
-pURI = peg.compile("""
-    URI     = (scheme ':')? ('//' auth)? path ('?' query)? ('#' frag)?
+uri = peg.compile("""
+    URI     = (scheme ':')? ('//' auth)? 
+               path ('?' query)? ('#' frag)?
     scheme  = ~[:/?#]+
     auth    = ~[/?#]*
     path    = ~[?#]*
     query   = ~'#'*
     frag    = ~[ \t\n\r]*
-""")
+    """,
+    transforms = {'URI': dict}
+)
 
 test = "http://www.ics.uci.edu/pub/ietf/uri/#Related"
-uri = pURI.parse(test)
 
-print(uri)
-```
-```
-URI
-│ scheme 'http'
-│ auth 'www.ics.uci.edu'
-│ path '/pub/ietf/uri/'
-│ frag 'Related'
-```
-p-tree:
-```
-["URI",[["scheme","http"],["auth","www.ics.uci.edu"],
-        ["path","/pub/ietf/uri/"],["frag","Related"]]]
+ok, data = uri.read(test)
+
+print(data)
+
+# => {'scheme': 'http', 'auth': 'www.ics.uci.edu',
+#     'path': '/pub/ietf/uri/', 'frag': 'Related'}
 ```
 
-##  Usage
+``` python
+import pPEGpy as peg
 
-Common usage:
+print("CSV example....")
 
-``` py
-    from pPEGpy import peg
+csv = peg.compile("""
+    CSV     = Row+
+    Row     = field (',' field)* _nl
+    field   = _string / _text
 
-    my_parser = peg.compile(""... my pPEG grammar rules...""")
+    _text   = ~[,\n\r]*
+    _string = '"' (~["] / '""')* '"'
+    _nl     = '\n' / '\r' '\n'?
+    """,
+    transforms = {
+        'CSV':list, 'Row':list, 'field':str
+    }
+)
 
-    # -- use my-parser in my application .......
+test = """A,B,C
+a1,b1,c1
+a2,"b,2",c2
+a3,b3,c3
+"""
 
-    my_parse = my_parser.parse('...input string...}')
+ok, data = csv.read(test)
 
-    if not my_parse.ok:
-        # handle parse failure ... 
-        print(my_parse)
-    else:    
-        ptree = my_parse.ptree()
-        process(ptree)
+print(data)
+
+# [['A', 'B', 'C'],
+#  ['a1', 'b1', 'c1'],
+#  ['a2', '"b,2"', 'c2'],
+#  ['a3', 'b3', 'c3']]
+
+# -- parse tree --------
+
+p = csv.parse(test);
+
+print(p)
+
+# CSV
+# │ Row
+# │ │ field 'A'
+# │ │ field 'B'
+# │ │ field 'C'
+# │ Row
+# │ │ field 'a1'
+# │ │ field 'b1'
+# │ │ field 'c1'
+# │ Row
+# │ │ field 'a2'
+# │ │ field '"b,2"'
+# │ │ field 'c2'
+# │ Row
+# │ │ field 'a3'
+# │ │ field 'b3'
+# │ │ field 'c3'
 ```
-The `ptree` parse tree type is JSON data, as defined in [pPEG].
+
 
 ## Package Notes
 
@@ -149,4 +159,3 @@ To avoid that (at the cost of all the Python packaging complications!) you can b
 [pPEG]: https://github.com/pcanz/pPEG
 
 [pPEGpy]: https://github.com/pcanz/pPEGpy/tree/master 
-

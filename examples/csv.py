@@ -1,16 +1,20 @@
-from pPEGpy import peg
+import pPEGpy as peg
 
 print("CSV example....")
 
 csv = peg.compile("""
-    CSV     = Hdr Row+
-    Hdr     = Row
-    Row     = field (',' field)* '\r'? '\n'
-    field   = _string / _text / ''
+    CSV     = Row+
+    Row     = field (',' field)* _nl
+    field   = _string / _text
 
-    _text   = ~[,\n\r]+
+    _text   = ~[,\n\r]*
     _string = '"' (~["] / '""')* '"'
-""")
+    _nl     = '\n' / '\r' '\n'?
+    """,
+    transforms = {
+        'CSV':list, 'Row':list, 'field':str
+    }
+)
 
 test = """A,B,C
 a1,b1,c1
@@ -18,35 +22,37 @@ a2,"b,2",c2
 a3,b3,c3
 """
 
-p = csv.parse(test)
+ok, data = csv.read(test)
+
+print(data)
+
+# [['A', 'B', 'C'],
+#  ['a1', 'b1', 'c1'],
+#  ['a2', '"b,2"', 'c2'],
+#  ['a3', 'b3', 'c3']]
+
+# -- parse tree --------
+
+p = csv.parse(test);
+
 print(p)
 
-"""
-CSV example....
-CSV
-│ Hdr
-│ │ Row
-│ │ │ field 'A'
-│ │ │ field 'B'
-│ │ │ field 'C'
-│ Row
-│ │ field 'a1'
-│ │ field 'b1'
-│ │ field 'c1'
-│ Row
-│ │ field 'a2'
-│ │ field '"b,2"'
-│ │ field 'c2'
-│ Row
-│ │ field 'a3'
-│ │ field 'b3'
-│ │ field 'c3'
-"""
+# CSV
+# │ Row
+# │ │ field 'A'
+# │ │ field 'B'
+# │ │ field 'C'
+# │ Row
+# │ │ field 'a1'
+# │ │ field 'b1'
+# │ │ field 'c1'
+# │ Row
+# │ │ field 'a2'
+# │ │ field '"b,2"'
+# │ │ field 'c2'
+# │ Row
+# │ │ field 'a3'
+# │ │ field 'b3'
+# │ │ field 'c3'
 
-"""
-CSV example....
-["CSV",[["Hdr",[["Row",[["field","A"],["field","B"],["field","C"]]]]],
-    ["Row",[["field","a1"],["field","b1"],["field","c1"]]],
-    ["Row",[["field","a2"],["field","\"b,2\""],["field","c2"]]],
-    ["Row",[["field","a3"],["field","b3"],["field","c3"]]],["field",""]]]
-"""
+
