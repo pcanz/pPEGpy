@@ -132,8 +132,12 @@ These command lines can be used to build a local package:
 ```
 > cd <your pPEGpy directory>
 > uv init --lib
+
 > uv build
 > pip install -e .
+
+> python3 examples/date.py
+> ...
 ```
 The -e option allows local editing of the local files.
 

@@ -1,4 +1,5 @@
-import pPEGpy as peg
+# import pPEGpy as peg
+from pPEGpy import peg  # pip install pPEGpy
 
 print("CSV example....")
 
