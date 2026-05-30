@@ -17,7 +17,7 @@ For other ways to use the `pPEGpy` grammar-parser see the Package Notes below.
 ##  Examples
 
 ``` python
-import pPEGpy as peg
+from pPEGpy import peg
 
 print("Hello world!")
 
@@ -38,6 +38,7 @@ Run this example, then edit to see what works or fails.
 
 Comment out the transforms on line 11 to see the parse tree printed out as JSON.
 
+More examples:
 ``` python
 from pPEGpy import peg
 
