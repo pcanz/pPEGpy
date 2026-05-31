@@ -70,23 +70,23 @@ print(p)
 
 print("=====================")
 
-def palindrome(s):
-    ok,  = pal.read(s)
-    return t.transform(m=palindrome)
-
-
-pal = peg.compile(
-    """
-    p  = x1 m x2 / x1?
-    m  = (x &x)* <is p> 
-    x1 = x
-    x2 = <same x1>
-    x  : [a-z]
-    """,
-    transforms = {'m': palindrome}
-    extras = {'same': extras.same}
-)
-
-x = palindrome("racecar")
-
-print(x)
+# def palindrome(s):
+#     ok,  = pal.read(s)
+#     return t.transform(m=palindrome)
+# 
+# 
+# pal = peg.compile(
+#     """
+#     p  = x1 m x2 / x1?
+#     m  = (x &x)* <is p> 
+#     x1 = x
+#     x2 = <same x1>
+#     x  : [a-z]
+#     """,
+#     transforms = {'m': palindrome}
+#     extras = {'same': extras.same}
+# )
+# 
+# x = palindrome("racecar")
+# 
+# print(x)

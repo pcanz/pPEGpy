@@ -5,10 +5,8 @@ This is an implementation of a portable PEG parser in Python.
 For documentation see [pPEG], the portable PEG project.
 
 The `pPEGpy` package can be installed from PyPi with:
-Woops, lost my PyPi access credentials, so can't update PyPi yet...
-See Notes below for how to clone and install this repo.
 ```
-> pip install pPEGpy                  # version 3.18+  but not yet!
+> pip install pPEGpy                  # version 3.18+
 ```
 Note the spelling of `pPEGpy`, there are unrelated packages with similar names. 
 
