@@ -4,7 +4,7 @@
 # == extension functions ==============================================
 
 def dump(parse):  # <dump>
-    parse.dump(1)
+    parse.print_trace()
     return True
 
 
@@ -15,17 +15,20 @@ def eq(parse, args):  # <eq x y>
     y = None
     n = len(parse.trace) - 1
     while n >= 0:
-        if parse.fault(n) != 0:
+        node = parse.trace[n]
+        if node.fault(): #parse.fault(n) != 0:
             n -= 1
             continue
-        id = parse.id(n)
+        id = node.idx()
         if x is None and id == id1:
             x = n
         if y is None and id == id2:
             y = n
         if x and y:
-            dx = parse.depth(x)
-            dy = parse.depth(y)
+            xnode = parse.trace[x]
+            ynode = parse.trace[y]
+            dx = xnode.depth  # parse.depth(x)
+            dy = ynode.depth  # parse.depth(y)
             if x < y:
                 if dx <= dy:
                     break
@@ -39,9 +42,18 @@ def eq(parse, args):  # <eq x y>
         n -= 1
     if x is None or y is None:
         return False  # TODO err no x or y found
-    if parse.text(x) == parse.text(y):
-        return True
-    return False
+    xnode = parse.trace[x]
+    xstart = xnode.start
+    xend = xnode.end
+    ynode = parse.trace[y]
+    ystart = ynode.start
+    yend = ynode.end
+    if xend-xstart != yend-ystart:
+        return False
+    for i in range(0, xend-xstart):
+        if parse.input[xstart+i] != parse.input[ystart+i]:
+            return False
+    return True
 
 
 def same(parse, args):  # <same x>
@@ -51,15 +63,18 @@ def same(parse, args):  # <same x>
     d = parse.deep  # depth(n)
     hits = 0
     while n >= 0:
-        k = parse.depth(n)
+        node = parse.trace[n]
+        k = node.depth
         # <same name> may be in it's own rule, if so adjust it's depth....
         if hits == 0 and k < d:
             d -= 1
             continue
-        if parse.id(n) == id:
+        if node.idx() == id:
             hits += 1
-            start, end = parse.span(n)
-            if k > d or parse.fault(n) != 0 or end > pos:
+            start = node.start
+            end = node.end
+            # if k > d or parse.fault(n) != 0 or end > pos:
+            if k > d or node.fault() or end > pos:
                 n -= 1
                 continue
             if pos + end - start > parse.end:

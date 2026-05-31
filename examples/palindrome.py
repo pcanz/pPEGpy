@@ -1,8 +1,6 @@
 # import pPEGpy as peg  # local file
 from pPEGpy import peg  # pip install pPEGpy
 
-# NOTE:  <extras> not yet updated for new version of pPEGpy
-
 import extras
 
 extensions = extras.extensions()
@@ -14,13 +12,10 @@ p = peg.compile(
     x1 = x
     x  : [a-z]
     """,
-    same=extras.same,
-    # **extensions
+    extras = {'same': extras.same}
 )
 
 t = p.parse("abba")
-
-t.dump()
 
 print(t)
 
@@ -34,12 +29,10 @@ p = peg.compile(
     x2 = <same x1>
     x  : [a-z]
     """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 t = p.parse("abba")
-
-t.dump()
 
 print(t)
 
@@ -53,11 +46,10 @@ code = peg.compile(
     x2 = x
     x  : [a-z]
 """,
-    eq=extras.eq,
+    extras = {'eq': extras.eq}
 )
 
 p = code.parse("racecar")  # "abba")  #
-p.dump(0)
 print(p)
 
 print("=====================")
@@ -69,32 +61,31 @@ code = peg.compile(
     t1   = '`'+
     t2   = '`'+
     """,
-    **extensions,
+    extras = {'eq': extras.eq}
 )
 
-p = code.parse(R"```a``y``z```", debug=1)
-# p.dump(0)
+p = code.parse(R"```a``y``z```")
 print(p)
 
 
 print("=====================")
 
+def palindrome(s):
+    ok,  = pal.read(s)
+    return t.transform(m=palindrome)
+
+
 pal = peg.compile(
     """
     p  = x1 m x2 / x1?
-    m  = (x &x)*  #  m => p 
+    m  = (x &x)* <is p> 
     x1 = x
     x2 = <same x1>
     x  : [a-z]
     """,
-    same=extras.same,
+    transforms = {'m': palindrome}
+    extras = {'same': extras.same}
 )
-
-
-def palindrome(s):
-    t = pal.parse(s)
-    return t.transform(m=palindrome)
-
 
 x = palindrome("racecar")
 

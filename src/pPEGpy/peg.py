@@ -53,7 +53,13 @@ class Node:
     depth: int
     start: int
     end: int
+    
+    def idx(self):
+        return self.id & ID_VAL
 
+    def fault(self):
+        return self.id & FAULT != 0
+        
     def clone(n: Node):
         return Node(n.id, n.depth, n.start, n.end)
 

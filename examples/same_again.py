@@ -16,7 +16,7 @@ code = peg.compile(
     s = x ':' <same x>
     x = [a-z]*
 """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 print(code.parse("abc:abc"))
@@ -30,7 +30,7 @@ code = peg.compile(
     x1 = <same x>
     m  = (x &x)*
 """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 p = code.parse("racecar")
@@ -45,7 +45,7 @@ code = peg.compile(
     code = ~<same tics>*
     tics = [`]+
 """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 p = code.parse("```abc``def```")
@@ -60,7 +60,7 @@ raw = peg.compile(
     raw   = ~('"' <same fence>)*
     fence = '#'+
 """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 print(raw.parse("""##"abcc#"x"#def"##"""))
@@ -75,7 +75,7 @@ blocks = peg.compile(
     inset  = ' '+
     line   = ~[\n\r]* '\r'? '\n'?
 """,
-    same=extras.same,
+    extras = {'same': extras.same}
 )
 
 p = blocks.parse("""  line one
