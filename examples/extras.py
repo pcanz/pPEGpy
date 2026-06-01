@@ -1,5 +1,3 @@
-# NOTE:  <extras> not yet updated for new version of pPEGpy
-
 
 # == extension functions ==============================================
 
@@ -88,6 +86,16 @@ def same(parse, args):  # <same x>
         n -= 1
     return hits == 0  # no prior to be matched
 
+# -- <match rule> -----------------------------------
+
+def match(parse, args): # <match rule>
+    node = parse.trace[-1]
+    pos = parse.pos
+    if node.start == pos:
+        return True # nothing to match
+    id = parse.code.name_id(args[1])
+    return parse.match(id, node)
+
 
 # -- Python style indent, inset, dedent ----------------
 
@@ -151,6 +159,7 @@ def extensions():
         "undefined": dump,
         "same": same,
         "eq": eq,
+        "match": match,
         "indent": indent,
         "inset": inset,
         "dedent": dedent,

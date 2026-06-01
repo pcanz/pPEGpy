@@ -68,7 +68,7 @@ p = code.parse(R"```a``y``z```")
 print(p)
 
 
-print("=====================")
+print("== palindrome using transform ===================")
 
 def palindrome(pal, s):
     ok, _ = pal.read(s)
@@ -76,18 +76,36 @@ def palindrome(pal, s):
         raise Exception(f"{s} is not a palindrome")
     return s
 
-
 pal = peg.compile(
     """
-    P  = x1 (m <same x1>)?
-    m  = (x &x)* 
+    P  = x1 (xx <same x1>)?
+    xx = (x &x)*
     x1 = x
     x  : [a-z]
     """,
-    transforms = {'m': (lambda s: palindrome(pal, s))},
+    transforms = {'xx': lambda s: palindrome(pal, s)},
     extras = {'same': extras.same}
 )
 
 x = palindrome(pal, "racecar")
 
 print(x)
+
+
+print("== Better version using <match rule> ==================")
+
+
+pal = peg.compile(
+    """
+    P  = x1 (xx <same x1>)?
+    xx = (x &x)* <match P>
+    x1 = x
+    x  : [a-z]
+    """,
+    extras = {'same': extras.same, 'match':extras.match}
+)
+
+p = pal.parse("racecar")
+
+print(p.ok)
+

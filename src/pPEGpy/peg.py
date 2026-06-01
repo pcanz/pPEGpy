@@ -38,7 +38,7 @@ EQ = 0  # =    dynamic children: 0 => TERM, 1 => redundant, 2.. => HEAD
 ANON = 1  # :    rule name and results not in the parse tree
 HEAD = 2  # :=   parent node with any number of children
 TERM = 3  # =:   terminal leaf node text match
-
+ 
 # -- parse tree nodes -----------------------------------------------------
 
 FAULT = 0xF000  # any flag bit (top nibble in 16 bit id)
@@ -46,10 +46,9 @@ FAIL = 0x2000  # rule failed to match
 DROP = 0x1000  # back-track seq failed
 ID_VAL = 0xFFF  # 12 bit id mask (only expect to need 10 bits)
 
-
 @dataclass
 class Node:
-    id: int
+    id: int       #  FAULT | ID_VAL
     depth: int
     start: int
     end: int
@@ -152,6 +151,17 @@ class Parse:
 
     def run(self, id):
         return run(self, ["id", id])
+        
+    def match(parse, id, node):
+        pos = parse.pos
+        end = parse.end
+        parse.end = parse.pos
+        parse.pos = node.start
+        result = parse.run(id)
+        pos1 = parse.pos
+        parse.end = end
+        parse.pos = pos    
+        return result and pos1 == pos
 
 
 # -- the parser function itself -------------------
