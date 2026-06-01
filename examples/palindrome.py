@@ -41,7 +41,7 @@ print("=====================")
 code = peg.compile(
     """
     p  = x1 m x2 <eq x2 x1>
-    m  = (x &x)*  # <match m p>
+    m  = (x &x)*
     x1 = x
     x2 = x
     x  : [a-z]
@@ -70,23 +70,24 @@ print(p)
 
 print("=====================")
 
-# def palindrome(s):
-#     ok,  = pal.read(s)
-#     return t.transform(m=palindrome)
-# 
-# 
-# pal = peg.compile(
-#     """
-#     p  = x1 m x2 / x1?
-#     m  = (x &x)* <is p> 
-#     x1 = x
-#     x2 = <same x1>
-#     x  : [a-z]
-#     """,
-#     transforms = {'m': palindrome}
-#     extras = {'same': extras.same}
-# )
-# 
-# x = palindrome("racecar")
-# 
-# print(x)
+def palindrome(pal, s):
+    ok, _ = pal.read(s)
+    if not ok:
+        raise Exception(f"{s} is not a palindrome")
+    return s
+
+
+pal = peg.compile(
+    """
+    P  = x1 (m <same x1>)?
+    m  = (x &x)* 
+    x1 = x
+    x  : [a-z]
+    """,
+    transforms = {'m': (lambda s: palindrome(pal, s))},
+    extras = {'same': extras.same}
+)
+
+x = palindrome(pal, "racecar")
+
+print(x)
