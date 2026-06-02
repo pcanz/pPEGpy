@@ -5,6 +5,8 @@ import extras
 
 extensions = extras.extensions()
 
+print("=====================")
+
 p = peg.compile(
     """
     p  = x1 m <same x1> / x?
@@ -16,6 +18,37 @@ p = peg.compile(
 )
 
 t = p.parse("abba")
+
+print(t)
+
+print("=== Markdown code ==================")
+
+p = peg.compile(
+    """
+    markup = ticks code ticks
+    code   = ~<same ticks>*
+    ticks  = '`'+
+    """,
+    extras = {'same': extras.same}
+)
+
+t = p.parse("```x``xx```")
+
+print(t)
+
+
+print("=== Rust raw code ==================")
+
+p = peg.compile(
+    """
+    raw   = 'r' marks '"' text '"' marks
+    text  = ~('"' <same marks>)*
+    marks = '#'*
+    """,
+    extras = {'same': extras.same}
+)
+
+t = p.parse("""r##"xx #"x"# xx"##""")
 
 print(t)
 
@@ -68,6 +101,20 @@ p = code.parse(R"```a``y``z```")
 print(p)
 
 
+print("== middle finder ===================")
+
+middle = peg.compile(
+    """
+    middle = x inner x / x
+    inner  = (. &.)* <match middle>
+    x      = [a-z]
+    """,
+    extras = {'match': extras.match}
+)
+
+p = middle.parse("abcdcba")
+print(p)
+
 print("== palindrome using transform ===================")
 
 def palindrome(pal, s):
@@ -78,12 +125,11 @@ def palindrome(pal, s):
 
 pal = peg.compile(
     """
-    P  = x1 (xx <same x1>)?
-    xx = (x &x)*
-    x1 = x
-    x  : [a-z]
+    p  = x px x / x
+    px = (. &.)*
+    x  = [a-z]
     """,
-    transforms = {'xx': lambda s: palindrome(pal, s)},
+    transforms = {'px': lambda s: palindrome(pal, s)},
     extras = {'same': extras.same}
 )
 
@@ -97,15 +143,15 @@ print("== Better version using <match rule> ==================")
 
 pal = peg.compile(
     """
-    P  = x1 (xx <same x1>)?
-    xx = (x &x)* <match P>
-    x1 = x
-    x  : [a-z]
+    p  = x px z / x
+    px = (. &.)* <match p>
+    z  = <same x>
+    x  = [a-z]
     """,
     extras = {'same': extras.same, 'match':extras.match}
 )
 
 p = pal.parse("racecar")
 
-print(p.ok)
+print(p)
 
