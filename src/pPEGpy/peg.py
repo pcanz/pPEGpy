@@ -195,6 +195,7 @@ def run(parse: Parse, expr: list) -> bool:
             if parse.anon:
                 ok = run(parse, parse.code.codes[idx])
                 return ok
+                
             defx = parse.code.defs[idx]
             if defx == ANON:
                 parse.anon = True
@@ -214,12 +215,13 @@ def run(parse: Parse, expr: list) -> bool:
             index = parse.index  # this node == len(parse.nodes)
             parse.index += 1
             parse.trace.append(Node(idx, depth, pos, 0))
-
+            
             # -- run -----------------------
-            rule = parse.code.codes[idx]
-            ok = run(parse, rule)  # ok = True | False
+            if defx == TERM: parse.anon = True
+            ok = run(parse, parse.code.codes[idx])  # ok = True | False
+            if defx == TERM: parse.anon = False
             # ------------------------------
-
+            
             # -- parse trace:  ---------------
             parse.trace[index].end = parse.pos
             if not ok:
