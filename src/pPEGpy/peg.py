@@ -656,15 +656,23 @@ def show_pos(parse, info=""):
     sol = line_start(parse, pos - 1)
     eol = line_end(parse, pos)
     ln = line_number(parse.input, sol)
-    left = f"line {ln} | {parse.input[sol + 1 : pos]}"
+    text = clean_chars(parse.input[sol + 1 : pos])
+    left = f"line {ln} | {text}"
     prior = ""  # show previous line...
     if sol > 0:
         sol1 = line_start(parse, sol - 1)
-        prior = f"line {ln - 1} | {parse.input[sol1 + 1 : sol]}\n"
+        text = clean_chars(parse.input[sol1 + 1 : sol])
+        prior = f"line {ln - 1} | {text}\n"
     if pos == parse.end:
         return f"{prior}{left}\n{' ' * len(left)}^ {info}"
     return f"{prior}{left}{parse.input[pos:eol]}\n{' ' * len(left)}^ {info}"
 
+def clean_chars(txt):
+    cs = []  # tabs or ctl can throw off pos length count
+    for c in txt:
+        if c < ' ': cs.append(' ')
+        else: cs.append(c)
+    return ''.join(cs)
 
 def line_start(parse, sol):
     while sol >= 0 and parse.input[sol] != "\n":
