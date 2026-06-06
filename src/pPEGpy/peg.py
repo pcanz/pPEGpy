@@ -361,6 +361,9 @@ def run(parse: Parse, expr: list) -> bool:
             parse.pos += 1
             return True
 
+        case ["noop"]:
+                return True
+            
         case ["ext", fn, *args]:  # compiled from <some extension>
             return fn(parse, *args)  # TODO reset fall-back on failure
 
@@ -785,7 +788,8 @@ class Code:
 
     def compose(self):
         define_rules(self)
-        self.codes = [emit(self, x) for x in self.rules]
+        for expr in self.rules: # NOT comprehension, extensions need codes.length
+            self.codes.append(emit(self, expr))            
         if self.err:
             self.ok = False
 
@@ -889,24 +893,46 @@ def emit(code, expr):
         case ["dot", _]:
             return ["dot"]
         case ["extn", extend]:
-            return ["ext", *extra_fn(code, extend)]
+            return extension_op(code, extend)
         case _:
             raise Exception(f"*** crash: emit: undefined expression: {expr}")
 
+# -- compile extensions --------------------------------------
 
-# -- compile extension --------------------------------------
-
-
-def extra_fn(code, extend):
+def extension_op(code, extend):
     args = extend[1:-1].split()  # <command args...>
-    extras = code.extras
-    op = extras.get(args[0], None)
-    if op is None:
-        e = f"*** Undefined extension: {extend}"
-        code.err.append(e)
-        return ["err", e]
-    return [op, args]
+    if fn := code.extras.get(args[0]):
+        return ['ext', fn, args]
+    if args[0] == 'to':  # <to JSON> builtin transforms
+        return transform_ext(code, args) 
+    e = f"*** Undefined extension: {extend}"
+    code.err.append(e)
+    return ["err", e]
 
+def to_number(s):
+    try:
+        return int(s)
+    except:
+        return float(s)
+   
+builtin_transforms = {
+    'Object': dict,
+    'Array': list,
+    'String': str,
+    'Number': to_number   
+}
+   
+def transform_ext(code, args):
+    name = code.names[len(code.codes)] # current rule
+    fname = args[1]  # <to type> or <to :type>
+    if fname[0] == ':':
+        name += ':'
+        fname = fname[1:]
+    fn = builtin_transforms.get(fname)
+    if not fn:
+        code.err.append(f"*** Undefined transform: {fname}")
+    code.transforms[name] = fn  # { 'name': fn, or 'name:': fn }
+    return ['noop']
 
 # -- escape codes ----------------------
 
