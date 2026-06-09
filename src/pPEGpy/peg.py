@@ -924,14 +924,15 @@ builtin_transforms = {
    
 def transform_ext(code, args):
     name = code.names[len(code.codes)] # current rule
-    fname = args[1]  # <to type> or <to :type>
-    if fname[0] == ':':
+    fname = args[1] if len(args) > 1 else '$none'
+    if fname[0] == ':':  # <to type> or <to :type>
         name += ':'
         fname = fname[1:]
     fn = builtin_transforms.get(fname)
-    if not fn:
+    if fn:
+        code.transforms[name] = fn  # { 'name': fn, or 'name:': fn }
+    else:
         code.err.append(f"*** Undefined transform: {fname}")
-    code.transforms[name] = fn  # { 'name': fn, or 'name:': fn }
     return ['noop']
 
 # -- escape codes ----------------------
