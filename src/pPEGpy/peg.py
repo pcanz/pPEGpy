@@ -365,7 +365,7 @@ def run(parse: Parse, expr: list) -> bool:
                 return True
             
         case ["ext", fn, *args]:  # compiled from <some extension>
-            return fn(parse, *args)  # TODO reset fall-back on failure
+            return fn(parse, *args)  # trust fn to reset fall-back on failure
 
         case _:
             raise Exception("*** crash: run: undefined expression...")
