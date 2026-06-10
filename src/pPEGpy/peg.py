@@ -179,10 +179,10 @@ def parser(code: Code, input: str, start=-1, end=-1) -> Parse:
         parse.fell_short = True
         ok = False
     parse.ok = ok
-    if parse.ok:
-        parse.tree = prune_tree(parse)  # delete trace faults and redundant nodes
-    else:
-        parse.tree = prune_trace(parse)  # keeps faults but deletes redundant nodes
+    if parse.ok:  # delete trace faults and redundant nodes
+        parse.tree = prune_tree(parse) # good tree
+    else:  # keeps faults but deletes redundant nodes
+        parse.tree = prune_trace(parse) # bad tree
     return parse
 
 
@@ -418,7 +418,7 @@ def child_count(p, i, d):
         dep = p.trace[i].depth
         if dep < d:  # no more children at this depth
             break
-        if dep == d:
+        if dep == d: # but don't count faults..
             if p.trace[i].id & FAULT:
                 i += 1
                 while i < j and p.trace[i].depth > dep:
@@ -459,7 +459,7 @@ def tidy(p, i, d, n, tree):  #  -> i,  builds tree from trace
         node = p.trace[i]
         id = node.id
         if (id & FAULT) and node.start == node.end:  # skip over empty faults
-            i += 1  # TODO delete while loop
+            i += 1  # empty fault node should not have children, but...
             while i < j and p.trace[i].depth > dep:
                 i += 1  # skip over any children...
             continue
@@ -485,11 +485,11 @@ def child_trim_count(p, i, d):
         dep = p.trace[i].depth
         if dep < d:  # no more children at this depth
             break
-        if dep == d:
+        if dep == d:  # but skip empty faults..
             node = p.trace[i]
             id = node.id
             if (id & FAULT) and node.start == node.end:  # skip over empty faults
-                i += 1  # TODO delete while loop
+                i += 1  # empty fault node should not have children, but...
                 while i < j and p.trace[i].depth > dep:
                     i += 1  # skip over any children...
                 continue
@@ -499,19 +499,6 @@ def child_trim_count(p, i, d):
         i += 1
     return count
 
-# -- show trace node --------------------------------------------------------
-
-def show_trace(parse):  # TODO delete all this...
-    for i in range(0,len(parse.trace)):
-        show_trace_node(parse, i)
-        
-def show_trace_node(parse, index):
-    node = parse.trace[index]
-    name = parse.code.names[node.id & ID_VAL]
-    fail = 0 if node.id & FAIL == 0 else 1
-    drop = 0 if node.id & DROP == 0 else 1
-    print(f"{name} {fail=}{drop} {node.start}..{node.end}")
-    
 
 # -- ptree json -----------------------------------------------------------------
 
@@ -809,14 +796,13 @@ class Code:
 
     def name_id(self, name):
         try:
-            idx = self.names.index(name)
-            return idx
+            return self.names.index(name)
         except ValueError:
             self.err.append(f"undefined rule: {name}")
             code_rule_defs(self, name, "=", ["extn", "<undefined>"])
             return len(self.names) - 1
 
-    def id_name(self, id):  # TODO handle IndexError
+    def id_name(self, id):
         return self.names[id]
 
     def read(self, input):
