@@ -609,28 +609,28 @@ def depth_of(parse, i):
 def dump_tree(parse: Parse) -> None:
     for i in range(0, len(parse.tree)):
         dump_tree_node(parse, i)
+    # print any remaining unparsed input...
     eot = parse.end
-    pos = parse.max_pos
-    if pos == 0:  # no max fail ...
-        pos = parse.tree[-1].end
+    pos = max(parse.pos, parse.max_pos)
     if pos < eot:
-        max_node = parse.tree[parse.max_tree]
-        depth = max_node.depth
+        depth = 0
+        if parse.max_tree < len(parse.tree):
+            max_node = parse.tree[parse.max_tree]
+            depth = max_node.depth
         value = format_span(parse.input, pos, eot)
         print(f"{indent_bars(depth)}\x1b[1;41m{value[1:-1]}\x1b[0m")
-
 
 def dump_tree_node(parse, i):
     node = parse.tree[i]
     id = node.id
     if (id & FAULT) and node.start == node.end:
         return  # skip empty fails
-    # if id & FAIL:
-    #     name = "\x1b[1;31m!" + parse.code.names[id & ID_VAL] + "\x1b[0m"
-    # elif id & DROP:
-    #     name = "\x1b[1;31m-" + parse.code.names[id & ID_VAL] + "\x1b[0m"
-    # else:
-    #     name = parse.code.names[id]
+    if id & FAIL:
+        name = "\x1b[1;31m!" + parse.code.names[id & ID_VAL] + "\x1b[0m"
+    elif id & DROP:
+        name = "\x1b[1;31m-" + parse.code.names[id & ID_VAL] + "\x1b[0m"
+    else:
+        name = parse.code.names[id]
     name = parse.code.names[id & ID_VAL]
     value = ""
     if i + 1 == len(parse.tree) or parse.tree[i + 1].depth <= node.depth:
@@ -883,6 +883,48 @@ def emit(code, expr):
         case _:
             raise Exception(f"*** crash: emit: undefined expression: {expr}")
 
+
+# -- escape codes ----------------------
+
+def escape(s, code):
+    r = ""
+    i = 0
+    while i < len(s):
+        c = s[i]
+        i += 1
+        if c == "\\" and i < len(s):
+            k = s[i]
+            i += 1
+            if k == "n":
+                c = "\n"
+            elif k == "r":
+                c = "\r"
+            elif k == "t":
+                c = "\t"
+            elif k == "x":
+                c, i = hex_value(2, s, i)
+            elif k == "u":
+                c, i = hex_value(4, s, i)
+            elif k == "U":
+                c, i = hex_value(8, s, i)
+            else:
+                i -= 1
+            if c is None:
+                code.err.append(f"bad escape code: {s}")
+                return s
+        r += c
+    return r
+
+def hex_value(n, s, i):
+    if i + n > len(s):
+        return (None, i)
+    try:
+        code = int(s[i : i + n], 16)
+    except Exception:
+        return (None, i)
+    return (chr(code), i + n)
+
+
 # -- compile extensions --------------------------------------
 
 def extension_op(code, extend):
@@ -921,51 +963,8 @@ def transform_ext(code, args):
         code.err.append(f"*** Undefined transform: {fname}")
     return ['noop']
 
-# -- escape codes ----------------------
-
-
-def escape(s, code):
-    r = ""
-    i = 0
-    while i < len(s):
-        c = s[i]
-        i += 1
-        if c == "\\" and i < len(s):
-            k = s[i]
-            i += 1
-            if k == "n":
-                c = "\n"
-            elif k == "r":
-                c = "\r"
-            elif k == "t":
-                c = "\t"
-            elif k == "x":
-                c, i = hex_value(2, s, i)
-            elif k == "u":
-                c, i = hex_value(4, s, i)
-            elif k == "U":
-                c, i = hex_value(8, s, i)
-            else:
-                i -= 1
-            if c is None:
-                code.err.append(f"bad escape code: {s}")
-                return s
-        r += c
-    return r
-
-
-def hex_value(n, s, i):
-    if i + n > len(s):
-        return (None, i)
-    try:
-        code = int(s[i : i + n], 16)
-    except Exception:
-        return (None, i)
-    return (chr(code), i + n)
-
 
 # -- parse.transform -----------------------------------------------------------
-
 
 def transformer(p: Parse, i, d) -> tuple[list, int]:
     vals = []
