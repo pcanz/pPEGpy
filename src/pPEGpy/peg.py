@@ -430,13 +430,11 @@ def child_count(p, i, d):
         i += 1
     return count
 
-
 # -- prune trace for failed parse -- keeps failures but removes redundant nodes -------
 
-# failures are included in parse tree fault reporting
+# the full trace is too much for a fault report, so prune to a partial (failed) tree
+# failed nodes (other than empty or re-parsed) are left in the incomplete parse tree
 # redundant nodes are removed to simplify the parse tree for easier reading
-# the full trace is too much for fault reporting, but is needed for debugging.
-
 
 def prune_trace(parse):
     tree = []
@@ -458,10 +456,9 @@ def tidy(p, i, d, n, tree):  #  -> i,  builds tree from trace
             break
         node = p.trace[i]
         id = node.id
-        if (id & FAULT) and node.start == node.end:  # skip over empty faults
-            i += 1  # empty fault node should not have children, but...
-            while i < j and p.trace[i].depth > dep:
-                i += 1  # skip over any children...
+        k = can_be_skipped(p, i, node)
+        if k > i:
+            i = k
             continue
         count = child_trim_count(p, i + 1, dep + 1)
         if (
@@ -477,6 +474,18 @@ def tidy(p, i, d, n, tree):  #  -> i,  builds tree from trace
         i += 1
     return i
 
+def can_be_skipped(p, i, node):
+    if (node.id & FAULT) == 0: return -1
+    if node.depth == 0: return -1 # don't skip failed root
+    j = i+1 # next node
+    while j < len(p.trace) and p.trace[j].depth > node.depth:
+        j += 1  # skip over any children...
+    if not j < len(p.trace): return -1
+    if node.start == node.end: return j # skip empty faults
+    if j < len(p.trace) and p.trace[j].start == node.start:
+        return j  # skip: failed and re-parsed
+    return -1
+
 
 def child_trim_count(p, i, d):
     count = 0
@@ -485,13 +494,12 @@ def child_trim_count(p, i, d):
         dep = p.trace[i].depth
         if dep < d:  # no more children at this depth
             break
-        if dep == d:  # but skip empty faults..
+        if dep == d:
             node = p.trace[i]
             id = node.id
-            if (id & FAULT) and node.start == node.end:  # skip over empty faults
-                i += 1  # empty fault node should not have children, but...
-                while i < j and p.trace[i].depth > dep:
-                    i += 1  # skip over any children...
+            k = can_be_skipped(p, i, node)
+            if k > i:
+                i = k
                 continue
             count += 1
             if count > 1:  # second child
